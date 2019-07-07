@@ -1,7 +1,12 @@
 # Folders
-.vs
-.vscode
+.vs/
+.vscode/
+bin/
+obj/
 
 # Files
-*.obj
 *.exe
+*.o
+*.obj
+*.out
+*.user

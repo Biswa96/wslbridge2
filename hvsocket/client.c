@@ -1,5 +1,5 @@
 /* 
-* This file is part of hvtool project
+* This file is part of wslbridge2 project
 * Licensed under the GNU General Public License version 3
 */
 

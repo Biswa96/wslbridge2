@@ -1,13 +1,10 @@
 /* 
-* This file is part of hvtool project
+* This file is part of wslbridge2 project
 * Licensed under the GNU General Public License version 3
 */
 
-#define WIN32_LEAN_AND_MEAN 1
-#include <Windows.h>
-#undef WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
-#include <hvsocket.h>
+#include "hvsocket.h"
 #include <stdio.h>
 
 #ifndef AF_HYPERV
