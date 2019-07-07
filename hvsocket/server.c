@@ -14,6 +14,14 @@
 #define PORT_NUM 5000
 #define BUFF_SIZE 400
 
+void Log(int ret, const char* function)
+{
+    if (ret == 0)
+        printf("%s success\n", function);
+    else
+        printf("%s error: %d\n", function, WSAGetLastError());
+}
+
 int main(void)
 {
     struct WSAData wdata;
@@ -21,8 +29,10 @@ int main(void)
     if (ret != 0)
         printf("WSAStartup error: %d\n", ret);
 
-    SOCKET sServer = socket(AF_HYPERV, SOCK_STREAM, IPPROTO_ICMP);
-    if (sServer == INVALID_SOCKET)
+    SOCKET sServer = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
+    if (sServer > 0)
+        printf("server socket: %lld\n", sServer);
+    else
         printf("socket error: %d\n", WSAGetLastError());
 
     struct _SOCKADDR_HV addr;
@@ -34,15 +44,15 @@ int main(void)
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
     addr.ServiceId.Data1 = PORT_NUM;
     ret = bind(sServer, (struct sockaddr*)&addr, sizeof addr);
-    if (ret != 0)
-        printf("bind error: %d\n", ret);
+    Log(ret, "bind");
 
-    ret = listen(sServer, SOMAXCONN);
-    if (ret != 0)
-        printf("listen error: %d\n", WSAGetLastError());
+    ret = listen(sServer, 1);
+    Log(ret, "listen");
 
     SOCKET sClient = accept(sServer, NULL, NULL);
-    if (sClient == INVALID_SOCKET)
+    if (sClient > 0)
+        printf("client socket: %lld\n", sClient);
+    else
         printf("accept error: %d\n", WSAGetLastError());
 
     char msg[BUFF_SIZE];
