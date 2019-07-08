@@ -3,6 +3,7 @@
 .vscode/
 bin/
 obj/
+out/
 
 # Files
 *.exe
