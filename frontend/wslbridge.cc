@@ -521,31 +521,6 @@ normalizePath(const std::wstring &path) {
     return std::make_pair(std::move(npath), fsname.data());
 }
 
-static std::wstring convertPathToWsl(const std::wstring &path) {
-    const auto isSlash = [](wchar_t ch) -> bool {
-        return ch == L'/' || ch == L'\\';
-    };
-    if (path.size() >= 3) {
-        const auto drive = lowerDrive(path[0]);
-        if (drive && path[1] == L':' && isSlash(path[2])) {
-            // Acceptable path.
-            std::wstring ret = L"/mnt/";
-            ret.push_back(drive);
-            ret.append(path.substr(2));
-            for (wchar_t &ch : ret) {
-                if (ch == L'\\') {
-                    ch = L'/';
-                }
-            }
-            return ret;
-        }
-    }
-    fatal(
-        "error: the backend program '%s' must be located on a "
-        "letter drive so WSL can access it with a /mnt/<LTR> path\n",
-        wcsToMbs(path).c_str());
-}
-
 static std::wstring findSystemProgram(const wchar_t *name) {
     std::array<wchar_t, MAX_PATH> windir;
     windir[0] = L'\0';
@@ -556,7 +531,7 @@ static std::wstring findSystemProgram(const wchar_t *name) {
     const auto path = [&](const wchar_t *part) -> std::wstring {
         return std::wstring(windir.data()) + part + name;
     };
-#if defined(__x86_64__)
+
     const auto ret = path(kPart32);
     if (pathExists(ret)) {
         return ret;
@@ -565,22 +540,6 @@ static std::wstring findSystemProgram(const wchar_t *name) {
               "note: Ubuntu-on-Windows must be installed\n",
               wcsToMbs(ret).c_str());
     }
-#elif defined(__i386__)
-    const wchar_t *const kPartNat = L"\\Sysnative\\";
-    const auto pathNat = path(kPartNat);
-    if (pathExists(pathNat)) {
-        return std::move(pathNat);
-    }
-    const auto path32 = path(kPart32);
-    if (pathExists(path32)) {
-        return std::move(path32);
-    }
-    fatal("error: neither '%s' nor '%s' exist\n"
-          "note: Ubuntu-on-Windows must be installed\n",
-          wcsToMbs(pathNat).c_str(), wcsToMbs(path32).c_str());
-#else
-    #error "Could not determine architecture"
-#endif
 }
 
 static void usage(const char *prog) {
@@ -597,10 +556,8 @@ static void usage(const char *prog) {
     printf("  -T            Do not use a pty.\n");
     printf("  -t            Use a pty (as long as stdin is a tty).\n");
     printf("  -t -t         Force a pty (even if stdin is not a tty).\n");
-    printf("  --distro-guid GUID\n");
-    printf("                Uses the WSL distribution identified by GUID.\n");
-    printf("                See HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss\n");
-    printf("                for a list of distribution GUIDs.\n");
+    printf("  --distro      Distribution Name.\n");
+    printf("                Run the specified distribution.\n");
     printf("  --backend BACKEND\n");
     printf("                Overrides the default path to wslbridge-backend. BACKEND is a\n");
     printf("                Cygwin-style path (not a WSL path).\n");
@@ -635,7 +592,7 @@ private:
     std::vector<std::pair<std::wstring, std::wstring>> pairs_;
 };
 
-static void appendBashArg(std::wstring &out, const std::wstring &arg) {
+static void appendWslArg(std::wstring &out, const std::wstring &arg) {
     if (!out.empty()) {
         out.push_back(L' ');
     }
@@ -806,17 +763,17 @@ private:
 // new WSL bash console and send it a return keypress.
 //
 // The HANDLE must be inheritable.
-static void spawnPressReturnProcess(HANDLE bashProcess) {
+static void spawnPressReturnProcess(HANDLE wslProcess) {
     const auto exePath = getModuleFileName(getCurrentModule());
     std::wstring cmdline;
     cmdline.append(L"\"");
     cmdline.append(exePath);
     cmdline.append(L"\" --press-return ");
-    cmdline.append(std::to_wstring(reinterpret_cast<uintptr_t>(bashProcess)));
+    cmdline.append(std::to_wstring(reinterpret_cast<uintptr_t>(wslProcess)));
     STARTUPINFOEXW sui {};
     sui.StartupInfo.cb = sizeof(sui);
     StartupInfoAttributeList attrList { sui.lpAttributeList, 1 };
-    StartupInfoInheritList inheritList { sui.lpAttributeList, { bashProcess } };
+    StartupInfoInheritList inheritList { sui.lpAttributeList, { wslProcess } };
     PROCESS_INFORMATION pi {};
     const BOOL success = CreateProcessW(exePath.c_str(), &cmdline[0], nullptr, nullptr,
         true, 0, nullptr, nullptr, &sui.StartupInfo, &pi);
@@ -851,14 +808,14 @@ static int handlePressReturn(const char *pidStr) {
         ss >> n;
         return reinterpret_cast<HANDLE>(n);
     };
-    const HANDLE bashProcess = str2handle(pidStr);
-    const DWORD bashPid = GetProcessId(bashProcess);
+    const HANDLE wslProcess = str2handle(pidStr);
+    const DWORD wslPid = GetProcessId(wslProcess);
     FreeConsole();
     for (int i = 0; i < 400; ++i) {
-        if (WaitForSingleObject(bashProcess, 0) == WAIT_OBJECT_0) {
+        if (WaitForSingleObject(wslProcess, 0) == WAIT_OBJECT_0) {
             // bash.exe has exited, give up immediately.
             return 0;
-        } else if (AttachConsole(bashPid)) {
+        } else if (AttachConsole(wslPid)) {
             std::array<INPUT_RECORD, 2> ir {};
             ir[0].EventType = KEY_EVENT;
             ir[0].Event.KeyEvent.bKeyDown = TRUE;
@@ -889,21 +846,6 @@ static std::vector<char> readAllFromHandle(HANDLE h) {
     return ret;
 }
 
-static std::tuple<DWORD, DWORD, DWORD> windowsVersion() {
-    OSVERSIONINFO info {};
-    info.dwOSVersionInfoSize = sizeof(info);
-    const BOOL success = GetVersionEx(&info);
-    assert(success && "GetVersionEx failed");
-    if (info.dwMajorVersion == 6 && info.dwMinorVersion == 2) {
-        // We want to distinguish between Windows 10.0.14393 and 10.0.15063,
-        // but if the EXE doesn't have an appropriate manifest, then
-        // GetVersionEx will report the lesser of 6.2 and the true version.
-        fprintf(stderr, "wslbridge warning: GetVersionEx reports version 6.2 -- "
-            "is wslbridge.exe properly manifested?\n");
-    }
-    return std::make_tuple(info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber);
-}
-
 static std::string replaceAll(std::string str, const std::string &from, const std::string &to) {
     size_t pos {};
     while ((pos = str.find(from, pos)) != std::string::npos) {
@@ -920,32 +862,6 @@ static std::string stripTrailing(std::string str) {
     return str;
 }
 
-// Ensure that the GUID is lower-case and surrounded with braces.
-// If the string isn't a valid GUID, then return an empty string.
-static std::string canonicalGuid(std::string guid) {
-    if (guid.size() == 38 && guid[0] == '{' && guid[37] == '}') {
-        // OK
-    } else if (guid.size() == 36) {
-        guid = '{' + guid + '}';
-    } else {
-        return {};
-    }
-    assert(guid.size() == 38);
-    for (size_t i = 1; i <= 36; ++i) {
-        if (i == 9 || i == 14 || i == 19 || i == 24) {
-            if (guid[i] != '-') {
-                return {};
-            }
-        } else {
-            guid[i] = tolower(guid[i]);
-            if (!isxdigit(guid[i])) {
-                return {};
-            }
-        }
-    }
-    return guid;
-}
-
 } // namespace
 
 int main(int argc, char *argv[]) {
@@ -959,7 +875,7 @@ int main(int argc, char *argv[]) {
 
     Environment env;
     std::string spawnCwd;
-    std::string distroGuid;
+    std::string distroName;
     std::string customBackendPath;
     enum class TtyRequest { Auto, Yes, No, Force } ttyRequest = TtyRequest::Auto;
     enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
@@ -972,12 +888,12 @@ int main(int argc, char *argv[]) {
     const struct option kOptionTable[] = {
         { "help",           false, nullptr,     'h' },
         { "debug-fork",     false, &debugFork,  1   },
-        { "distro-guid",    true,  nullptr,     'd' },
+        { "distro",         true,  nullptr,     'd' },
         { "no-login",       false, nullptr,     'L' },
         { "backend",        true,  nullptr,     'b' },
         { nullptr,          false, nullptr,     0   },
     };
-    while ((c = getopt_long(argc, argv, "+e:C:tTl", kOptionTable, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "+b:C:d:e:hlLtT", kOptionTable, nullptr)) != -1) {
         switch (c) {
             case 0:
                 // Ignore long option.
@@ -1015,10 +931,9 @@ int main(int argc, char *argv[]) {
                 ttyRequest = TtyRequest::No;
                 break;
             case 'd':
-                distroGuid = canonicalGuid(optarg);
-                if (distroGuid.empty()) {
-                    fatal("error: the --distro-guid argument '%s' is invalid\n", optarg);
-                }
+                distroName = optarg;
+                if (distroName.empty())
+                    fatal("error: the --distro argument '%s' is invalid\n", optarg);
                 break;
             case 'l':
                 loginMode = LoginMode::Yes;
@@ -1078,23 +993,20 @@ int main(int argc, char *argv[]) {
         errorSocket = std::unique_ptr<Socket>(new Socket);
     }
 
-    const auto bashPath = findSystemProgram(L"bash.exe");
+    const auto wslPath = findSystemProgram(L"wsl.exe");
     const auto backendPathInfo = normalizePath(findBackendProgram(customBackendPath));
     const auto backendPathWin = backendPathInfo.first;
     const auto fsname = backendPathInfo.second;
-    const auto backendPathWsl = convertPathToWsl(backendPathWin);
     const auto initialSize = terminalSize();
 
     // Prepare the backend command line.
-    std::wstring bashCmdLine;
-    bashCmdLine.append(L"\"$(if [ \"$(command -v wslpath)\" ]; then wslpath");
-    appendBashArg(bashCmdLine, backendPathWin);
-    bashCmdLine.append(L" || echo false; else echo");
-    appendBashArg(bashCmdLine, backendPathWsl);
-    bashCmdLine.append(L"; fi)\"");
+    std::wstring wslCmdLine;
+    wslCmdLine.append(L"\"$(wslpath -u");
+    appendWslArg(wslCmdLine, backendPathWin);
+    wslCmdLine.append(L")\"");
 
     if (debugFork) {
-        appendBashArg(bashCmdLine, L"--debug-fork");
+        appendWslArg(wslCmdLine, L"--debug-fork");
     }
 
     std::array<wchar_t, 1024> buffer;
@@ -1106,7 +1018,7 @@ int main(int argc, char *argv[]) {
                         kOutputWindowSize,
                         kOutputWindowSize / 4);
     assert(iRet > 0);
-    bashCmdLine.append(buffer.data());
+    wslCmdLine.append(buffer.data());
 
     if (usePty) {
         iRet = swprintf(buffer.data(), buffer.size(),
@@ -1119,32 +1031,32 @@ int main(int argc, char *argv[]) {
                         errorSocket->port());
     }
     assert(iRet > 0);
-    bashCmdLine.append(buffer.data());
+    wslCmdLine.append(buffer.data());
 
     if (loginMode == LoginMode::Yes) {
-        appendBashArg(bashCmdLine, L"-l");
+        appendWslArg(wslCmdLine, L"-l");
     }
     for (const auto &envPair : env.pairs()) {
-        appendBashArg(bashCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
+        appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
     }
     if (!spawnCwd.empty()) {
-        appendBashArg(bashCmdLine, L"-C" + mbsToWcs(spawnCwd));
+        appendWslArg(wslCmdLine, L"-C" + mbsToWcs(spawnCwd));
     }
-    appendBashArg(bashCmdLine, L"--");
+    appendWslArg(wslCmdLine, L"--");
     for (int i = optind; i < argc; ++i) {
-        appendBashArg(bashCmdLine, mbsToWcs(argv[i]));
+        appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
     }
 
     std::wstring cmdLine;
     cmdLine.append(L"\"");
-    cmdLine.append(bashPath);
+    cmdLine.append(wslPath);
     cmdLine.append(L"\"");
-    if (!distroGuid.empty()) {
-        cmdLine.append(L" ");
-        cmdLine.append(mbsToWcs(distroGuid));
+    if (!distroName.empty()) {
+        cmdLine.append(L" -d ");
+        cmdLine.append(mbsToWcs(distroName));
     }
-    cmdLine.append(L" -c ");
-    appendBashArg(cmdLine, bashCmdLine);
+    cmdLine.append(L" bash -c ");
+    appendWslArg(cmdLine, wslCmdLine);
 
     const auto outputPipe = createPipe();
     const auto errorPipe = createPipe();
@@ -1155,23 +1067,17 @@ int main(int argc, char *argv[]) {
         { outputPipe.wh, errorPipe.wh }
     };
 
-    if (windowsVersion() >= std::make_tuple(10u, 0u, 15063u)) {
-        // WSL was first officially shipped in 14393, but in that version,
-        // bash.exe did not allow redirecting stdout/stderr to a pipe.
-        // Redirection is allowed starting with 15063, and we'd like to use it
-        // to help report errors.
-        sui.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
-        sui.StartupInfo.hStdOutput = outputPipe.wh;
-        sui.StartupInfo.hStdError = errorPipe.wh;
-    }
+    sui.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+    sui.StartupInfo.hStdOutput = outputPipe.wh;
+    sui.StartupInfo.hStdError = errorPipe.wh;
 
     PROCESS_INFORMATION pi = {};
-    BOOL success = CreateProcessW(bashPath.c_str(), &cmdLine[0], nullptr, nullptr,
+    BOOL success = CreateProcessW(wslPath.c_str(), &cmdLine[0], nullptr, nullptr,
         true,
         debugFork ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
         nullptr, nullptr, &sui.StartupInfo, &pi);
     if (!success) {
-        fatal("error starting bash.exe adapter: %s\n",
+        fatal("error starting wsl.exe adapter: %s\n",
             formatErrorMessage(GetLastError()).c_str());
     }
 
@@ -1217,7 +1123,7 @@ int main(int argc, char *argv[]) {
             }
         }
         if (!out.empty()) {
-            msg.append("note: bash.exe output: ");
+            msg.append("note: wsl.exe output: ");
             msg.append(out);
             msg.push_back('\n');
         }
