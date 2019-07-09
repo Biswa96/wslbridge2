@@ -47,10 +47,6 @@
 
 #define BACKEND_PROGRAM "wslbridge-backend"
 
-// SystemFunction036 is also known as RtlGenRandom.  It might be possible to
-// replace this with getentropy, if not now, then later.
-extern "C" BOOLEAN WINAPI SystemFunction036(PVOID, ULONG);
-
 namespace {
 
 const int32_t kOutputWindowSize = 8192;
@@ -116,19 +112,6 @@ void Socket::close() {
     }
 }
 
-static std::string randomString() {
-    char buf[32] = {};
-    if (!SystemFunction036(&buf, sizeof(buf))) {
-        assert(false && "RtlGenRandom failed");
-    }
-    std::string out;
-    for (char ch : buf) {
-        out.push_back("0123456789ABCDEF"[(ch >> 4) & 0xF]);
-        out.push_back("0123456789ABCDEF"[(ch >> 0) & 0xF]);
-    }
-    return out;
-}
-
 static std::wstring mbsToWcs(const std::string &s) {
     const size_t len = mbstowcs(nullptr, s.c_str(), 0);
     if (len == static_cast<size_t>(-1)) {
@@ -154,38 +137,6 @@ static std::string wcsToMbs(const std::wstring &s, bool emptyOnError=false) {
     const size_t len2 = wcstombs(&ret[0], s.c_str(), len);
     assert(len == len2);
     return ret;
-}
-
-// As long as clients only get one chance to provide a key, this function
-// should be unnecessary.
-static bool secureStrEqual(const std::string &x, const std::string &y) {
-    if (x.size() != y.size()) {
-        return false;
-    }
-    volatile char ch = 0;
-    volatile const char *xp = &x[0];
-    volatile const char *yp = &y[0];
-    for (size_t i = 0; i < x.size(); ++i) {
-        ch |= (xp[i] ^ yp[i]);
-    }
-    return ch == 0;
-}
-
-static int acceptClientAndAuthenticate(Socket &socket, const std::string &key) {
-    const int cs = socket.accept();
-    std::string checkBuf;
-    checkBuf.resize(key.size());
-    size_t i = 0;
-    while (i < checkBuf.size()) {
-        const size_t remaining = checkBuf.size() - i;
-        const ssize_t actual = read(cs, &checkBuf[i], remaining);
-        assert(actual > 0 && static_cast<size_t>(actual) <= remaining);
-        i += actual;
-    }
-    if (!secureStrEqual(checkBuf, key)) {
-        fatal("error: key check failed\n");
-    }
-    return cs;
 }
 
 class TerminalState {
@@ -1021,7 +972,6 @@ int main(int argc, char *argv[]) {
     const struct option kOptionTable[] = {
         { "help",           false, nullptr,     'h' },
         { "debug-fork",     false, &debugFork,  1   },
-        { "version",        false, nullptr,     'v' },
         { "distro-guid",    true,  nullptr,     'd' },
         { "no-login",       false, nullptr,     'L' },
         { "backend",        true,  nullptr,     'b' },
@@ -1064,9 +1014,6 @@ int main(int argc, char *argv[]) {
             case 'T':
                 ttyRequest = TtyRequest::No;
                 break;
-            case 'v':
-                printf("wslbridge " STRINGIFY(WSLBRIDGE_VERSION) "\n");
-                exit(0);
             case 'd':
                 distroGuid = canonicalGuid(optarg);
                 if (distroGuid.empty()) {
@@ -1137,7 +1084,6 @@ int main(int argc, char *argv[]) {
     const auto fsname = backendPathInfo.second;
     const auto backendPathWsl = convertPathToWsl(backendPathWin);
     const auto initialSize = terminalSize();
-    const auto key = randomString();
 
     // Prepare the backend command line.
     std::wstring bashCmdLine;
@@ -1151,15 +1097,12 @@ int main(int argc, char *argv[]) {
         appendBashArg(bashCmdLine, L"--debug-fork");
     }
 
-    appendBashArg(bashCmdLine, L"--check-version=" STRINGIFY(WSLBRIDGE_VERSION));
-
     std::array<wchar_t, 1024> buffer;
     int iRet = swprintf(buffer.data(), buffer.size(),
-                        L" -3%d -0%d -1%d -k%s -w%d -t%d",
+                        L" -3%d -0%d -1%d -w%d -t%d",
                         controlSocket.port(),
                         inputSocket.port(),
                         outputSocket.port(),
-                        key.c_str(),
                         kOutputWindowSize,
                         kOutputWindowSize / 4);
     assert(iRet > 0);
@@ -1286,10 +1229,10 @@ int main(int argc, char *argv[]) {
         g_terminalState.fatal("%s", msg.c_str());
     });
 
-    const int controlSocketC = acceptClientAndAuthenticate(controlSocket, key);
-    const int inputSocketC = acceptClientAndAuthenticate(inputSocket, key);
-    const int outputSocketC = acceptClientAndAuthenticate(outputSocket, key);
-    const int errorSocketC = !errorSocket ? -1 : acceptClientAndAuthenticate(*errorSocket, key);
+    const int controlSocketC = controlSocket.accept();
+    const int inputSocketC = inputSocket.accept();
+    const int outputSocketC = outputSocket.accept();
+    const int errorSocketC = !errorSocket ? -1 : (*errorSocket).accept();
     controlSocket.close();
     inputSocket.close();
     outputSocket.close();

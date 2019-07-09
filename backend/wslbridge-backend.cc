@@ -43,7 +43,7 @@
 
 namespace {
 
-static int connectSocket(int port, const std::string &key) {
+static int connectSocket(int port) {
     const int s = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
     setSocketNoDelay(s);
@@ -54,14 +54,6 @@ static int connectSocket(int port, const std::string &key) {
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     const int connectRet = connect(s, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
     assert(connectRet == 0);
-
-    size_t i = 0;
-    while (i < key.size()) {
-        const size_t remaining = key.size() - i;
-        const ssize_t actual = write(s, &key[i], remaining);
-        assert(actual > 0 && static_cast<size_t>(actual) <= remaining);
-        i += actual;
-    }
 
     return s;
 }
@@ -495,14 +487,6 @@ void optionNotAllowed(const char *opt, const char *why, const T &val, const T &u
     }
 }
 
-static void frontendVersionCheck(const char *frontendVersion) {
-    if (strcmp(frontendVersion, STRINGIFY(WSLBRIDGE_VERSION)) != 0) {
-        fatal("error: wslbridge frontend-backend version mismatch"
-              " (frontend is version '%s', backend is version '%s')\n",
-              frontendVersion, STRINGIFY(WSLBRIDGE_VERSION));
-    }
-}
-
 } // namespace
 
 int main(int argc, char *argv[]) {
@@ -524,7 +508,6 @@ int main(int argc, char *argv[]) {
     int inputSocketPort = -1;
     int outputSocketPort = -1;
     int errorSocketPort = -1;
-    std::string key;
     int windowSize = -1;
     int windowThreshold = -1;
     ChildParams childParams;
@@ -537,14 +520,11 @@ int main(int argc, char *argv[]) {
         // This debugging option is handled earlier.  Include it in this table
         // just to discard it.
         { "debug-fork",     false, nullptr,     0 },
-        { "version",        false, nullptr,     'v' },
-        { "check-version",  true,  nullptr,     'V' },
         { nullptr,          false, nullptr,     0 },
     };
 
     int ch = 0;
-    bool versionChecked = false;
-    while ((ch = getopt_long(argc, argv, "+3:0:1:2:k:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1) {
+    while ((ch = getopt_long(argc, argv, "+3:0:1:2:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1) {
         switch (ch) {
             case 0:
                 // This is returned for the two long options.  getopt_long
@@ -554,7 +534,6 @@ int main(int argc, char *argv[]) {
             case '0': inputSocketPort = atoi(optarg); break;
             case '1': outputSocketPort = atoi(optarg); break;
             case '2': errorSocketPort = atoi(optarg); break;
-            case 'k': key = optarg; break;
             case 'c': childParams.cols = atoi(optarg); break;
             case 'r': childParams.rows = atoi(optarg); break;
             case 'w': windowSize = atoi(optarg); break;
@@ -562,22 +541,11 @@ int main(int argc, char *argv[]) {
             case 'e': childParams.env.push_back(strdup(optarg)); break;
             case 'C': childParams.cwd = optarg; break;
             case 'l': loginMode = true; break;
-            case 'v':
-                printf("wslbridge-backend " STRINGIFY(WSLBRIDGE_VERSION) "\n");
-                exit(0);
-            case 'V':
-                // Do the version check early before we choke on an unexpected
-                // argument from a mismatched frontend.
-                frontendVersionCheck(optarg);
-                versionChecked = true;
-                break;
             default:
                 exit(1);
         }
     }
-    if (!versionChecked) {
-        frontendVersionCheck("<old>"); // The frontend predates the version-checking.
-    }
+
     for (int i = optind; i < argc; ++i) {
         childParams.argv.push_back(argv[i]);
     }
@@ -610,7 +578,7 @@ int main(int argc, char *argv[]) {
     optionRequired("-3", controlSocketPort, -1);
     optionRequired("-0", inputSocketPort, -1);
     optionRequired("-1", outputSocketPort, -1);
-    optionRequired("-k", key, std::string());
+
     if (ptyMode) {
         optionRequired("-c", childParams.cols, -1);
         optionRequired("-r", childParams.rows, -1);
@@ -630,10 +598,10 @@ int main(int argc, char *argv[]) {
     assert(windowParams.threshold >= 1);
     assert(windowParams.threshold <= windowParams.size);
 
-    const int controlSocket = connectSocket(controlSocketPort, key);
-    const int inputSocket = connectSocket(inputSocketPort, key);
-    const int outputSocket = connectSocket(outputSocketPort, key);
-    const int errorSocket = ptyMode ? -1 : connectSocket(errorSocketPort, key);
+    const int controlSocket = connectSocket(controlSocketPort);
+    const int inputSocket = connectSocket(inputSocketPort);
+    const int outputSocket = connectSocket(outputSocketPort);
+    const int errorSocket = ptyMode ? -1 : connectSocket(errorSocketPort);
 
     const auto child = spawnChild(childParams);
 
