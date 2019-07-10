@@ -43,6 +43,7 @@
 #include <utility>
 #include <vector>
 
+#include "LocalSock.hpp"
 #include "../common/SocketIo.h"
 
 #define BACKEND_PROGRAM "wslbridge-backend"
@@ -59,56 +60,6 @@ static TermSize terminalSize() {
         return TermSize { ws.ws_col, ws.ws_row };
     } else {
         return TermSize { 80, 24 };
-    }
-}
-
-class Socket {
-public:
-    Socket();
-    ~Socket() { close(); }
-    int port() { return port_; }
-    int accept();
-    void close();
-
-private:
-    int s_;
-    int port_;
-};
-
-Socket::Socket() {
-    s_ = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(s_ >= 0);
-
-    setSocketNoDelay(s_);
-
-    sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(0);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    const int bindRet = bind(s_, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
-    assert(bindRet == 0);
-
-    const int listenRet = listen(s_, 1);
-    assert(listenRet == 0);
-
-    socklen_t addrLen = sizeof(addr);
-    const int getRet = getsockname(s_, reinterpret_cast<sockaddr*>(&addr), &addrLen);
-    assert(getRet == 0);
-
-    port_ = ntohs(addr.sin_port);
-}
-
-int Socket::accept() {
-    const int cs = ::accept(s_, nullptr, nullptr);
-    assert(cs >= 0);
-    setSocketNoDelay(cs);
-    return cs;
-}
-
-void Socket::close() {
-    if (s_ != -1) {
-        ::close(s_);
-        s_ = -1;
     }
 }
 
@@ -985,12 +936,12 @@ int main(int argc, char *argv[]) {
     // We want to handle EPIPE rather than receiving SIGPIPE.
     signal(SIGPIPE, SIG_IGN);
 
-    Socket controlSocket;
-    Socket inputSocket;
-    Socket outputSocket;
-    std::unique_ptr<Socket> errorSocket;
+    LocalSock controlSocket;
+    LocalSock inputSocket;
+    LocalSock outputSocket;
+    std::unique_ptr<LocalSock> errorSocket;
     if (!usePty) {
-        errorSocket = std::unique_ptr<Socket>(new Socket);
+        errorSocket = std::unique_ptr<LocalSock>(new LocalSock);
     }
 
     const auto wslPath = findSystemProgram(L"wsl.exe");

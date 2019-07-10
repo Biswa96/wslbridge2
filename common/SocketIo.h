@@ -32,7 +32,6 @@ ssize_t writeRestarting(int fd, const void *buf, size_t count);
 bool writeAllRestarting(int fd, const void *buf, size_t count);
 ssize_t readRestarting(int fd, void *buf, size_t count);
 bool readAllRestarting(int fd, void *buf, size_t count);
-void setSocketNoDelay(int s);
 
 struct TermSize {
     uint16_t cols;

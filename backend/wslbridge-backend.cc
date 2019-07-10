@@ -46,7 +46,9 @@ namespace {
 static int connectSocket(int port) {
     const int s = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
-    setSocketNoDelay(s);
+    const int flag = 1;
+    const int nodelayRet = setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+    assert(nodelayRet == 0);
 
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;

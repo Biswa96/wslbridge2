@@ -93,12 +93,6 @@ bool readAllRestarting(int fd, void *buf, size_t count) {
     return true;
 }
 
-void setSocketNoDelay(int s) {
-    const int flag = 1;
-    const int nodelayRet = setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-    assert(nodelayRet == 0);
-}
-
 BridgedErrno bridgedErrno(int err) {
     switch (err) {
         case 0:                 return BridgedErrno::Success;
