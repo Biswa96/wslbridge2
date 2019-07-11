@@ -8,4 +8,4 @@ else
 endif
 
 clean:
-	rm -rf out
+	rm -rf bin/*

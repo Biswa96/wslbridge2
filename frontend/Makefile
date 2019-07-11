@@ -1,14 +1,35 @@
+# Makefile for wslbridge2 frontend
+
 STRIP ?= strip
+NAME = wslbridge.exe
+BINDIR = ../bin
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
+LFLAGS = -static -static-libgcc -static-libstdc++
+BINS = \
+$(BINDIR)/LocalSock.obj \
+$(BINDIR)/SocketIo.obj \
+$(BINDIR)/wslbridge.obj
 
-all : ../out/wslbridge.exe
+# Windows header specific options
+CCOPT = -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE
 
-../out/wslbridge.exe : wslbridge.cc LocalSock.cpp ../common/SocketIo.cc ../common/SocketIo.h
-	mkdir -p ../out
-	$(CXX) -std=c++11 -fno-exceptions \
-		-static -static-libgcc -static-libstdc++ \
-		-D_GNU_SOURCE -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE \
-		-Wall -O2 $< LocalSock.cpp ../common/SocketIo.cc -o $@
-	$(STRIP) $@
+all : $(BINDIR) $(NAME)
 
-clean:
-	rm -f ../out/wslbridge.exe
+$(NAME) : $(BINS)
+	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
+	$(STRIP) $(BINDIR)/$@
+
+$(BINDIR)/LocalSock.obj : LocalSock.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/SocketIo.obj : ../common/SocketIo.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/wslbridge.obj : wslbridge.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
+
+$(BINDIR) :
+	mkdir -p $(BINDIR)
+
+clean :
+	rm -f $(BINDIR)/$(NAME)

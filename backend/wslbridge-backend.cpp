@@ -39,7 +39,7 @@
 #include <thread>
 #include <vector>
 
-#include "../common/SocketIo.h"
+#include "../common/SocketIo.hpp"
 
 namespace {
 

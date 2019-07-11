@@ -44,7 +44,7 @@
 #include <vector>
 
 #include "LocalSock.hpp"
-#include "../common/SocketIo.h"
+#include "../common/SocketIo.hpp"
 
 #define BACKEND_PROGRAM "wslbridge-backend"
 

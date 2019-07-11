@@ -1,14 +1,28 @@
+# Makefile for wslbridge2 backend
+
 STRIP ?= strip
+NAME = wslbridge-backend
+BINDIR = ../bin
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
+LFLAGS = -lutil -pthread -static-libgcc -static-libstdc++
+BINS = \
+$(BINDIR)/wslbridge-backend.o \
+$(BINDIR)/SocketIo.o
 
-all : ../out/wslbridge-backend
+all : $(BINDIR) $(NAME)
 
-../out/wslbridge-backend : wslbridge-backend.cc ../common/SocketIo.cc ../common/SocketIo.h
-	mkdir -p ../out
-	$(CXX) -std=c++11 -fno-exceptions \
-		-static-libgcc -static-libstdc++ \
-		-D_GNU_SOURCE \
-		-Wall -O2 $< ../common/SocketIo.cc -o $@ -lutil -pthread
-	$(STRIP) $@
+$(NAME) : $(BINS)
+	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
+	$(STRIP) $(BINDIR)/$@
 
-clean:
-	rm -f ../out/wslbridge-backend
+$(BINDIR)/wslbridge-backend.o : wslbridge-backend.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/SocketIo.o : ../common/SocketIo.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR) :
+	mkdir -p $(BINDIR)
+
+clean :
+	rm -f $(BINDIR)/$(NAME)
