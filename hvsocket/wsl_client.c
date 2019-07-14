@@ -22,6 +22,8 @@ int main(void)
     int sockfd = socket(AF_VSOCK, SOCK_STREAM, 0);
     if (sockfd < 0)
         printf("socket error: %s\n", strerror(errno));
+    else
+        printf("socket: %d\n", sockfd);
 
     struct sockaddr_vm addr;
     memset(&addr, 0, sizeof addr);
@@ -32,6 +34,8 @@ int main(void)
     int ret = connect(sockfd, (struct sockaddr*)&addr, sizeof addr);
     if (ret < 0)
         printf("connect error: %s\n", strerror(errno));
+    else
+        printf("connect port: %d\n", addr.svm_port);
 
     char msg[BUFF_SIZE];
 
