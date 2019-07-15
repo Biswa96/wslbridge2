@@ -8,6 +8,7 @@ LFLAGS = -static -static-libgcc -static-libstdc++
 BINS = \
 $(BINDIR)/LocalSock.obj \
 $(BINDIR)/SocketIo.obj \
+$(BINDIR)/TerminalState.obj \
 $(BINDIR)/wslbridge.obj
 
 # Windows header specific options
@@ -23,6 +24,9 @@ $(BINDIR)/LocalSock.obj : LocalSock.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/SocketIo.obj : ../common/SocketIo.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/TerminalState.obj : TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/wslbridge.obj : wslbridge.cpp

@@ -43,8 +43,9 @@
 #include <utility>
 #include <vector>
 
-#include "LocalSock.hpp"
 #include "../common/SocketIo.hpp"
+#include "LocalSock.hpp"
+#include "TerminalState.hpp"
 
 #define BACKEND_PROGRAM "wslbridge-backend"
 
@@ -88,112 +89,6 @@ static std::string wcsToMbs(const std::wstring &s, bool emptyOnError=false) {
     const size_t len2 = wcstombs(&ret[0], s.c_str(), len);
     assert(len == len2);
     return ret;
-}
-
-class TerminalState {
-private:
-    std::mutex mutex_;
-    bool inRawMode_ = false;
-    bool modeValid_[2] = {false, false};
-    termios mode_[2] = {};
-
-public:
-    void enterRawMode();
-
-private:
-    void leaveRawMode(const std::lock_guard<std::mutex> &lock);
-
-public:
-    void fatal(const char *fmt, ...)
-        __attribute__((noreturn))
-        __attribute__((format(printf, 2, 3)));
-    void fatalv(const char *fmt, va_list ap) __attribute__((noreturn));
-    void exitCleanly(int exitStatus);
-};
-
-// Put the input terminal into non-canonical mode.
-void TerminalState::enterRawMode() {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    assert(!inRawMode_);
-    inRawMode_ = true;
-
-    for (int i = 0; i < 2; ++i) {
-        if (!isatty(i)) {
-            modeValid_[i] = false;
-        } else {
-            if (tcgetattr(i, &mode_[i]) < 0) {
-                fatalPerror("tcgetattr failed");
-            }
-            modeValid_[i] = true;
-        }
-    }
-
-    if (modeValid_[0]) {
-        termios buf;
-        if (tcgetattr(0, &buf) < 0) {
-            fatalPerror("tcgetattr failed");
-        }
-        buf.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-        buf.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-        buf.c_cflag &= ~(CSIZE | PARENB);
-        buf.c_cflag |= CS8;
-        buf.c_cc[VMIN] = 1;  // blocking read
-        buf.c_cc[VTIME] = 0;
-        if (tcsetattr(0, TCSAFLUSH, &buf) < 0) {
-            fatalPerror("tcsetattr failed");
-        }
-    }
-
-    if (modeValid_[1]) {
-        termios buf;
-        if (tcgetattr(1, &buf) < 0) {
-            fatalPerror("tcgetattr failed");
-        }
-        buf.c_cflag &= ~(CSIZE | PARENB);
-        buf.c_cflag |= CS8;
-        buf.c_oflag &= ~OPOST;
-        if (tcsetattr(1, TCSAFLUSH, &buf) < 0) {
-            fatalPerror("tcsetattr failed");
-        }
-    }
-}
-
-void TerminalState::leaveRawMode(const std::lock_guard<std::mutex> &lock) {
-    if (!inRawMode_) {
-        return;
-    }
-    for (int i = 0; i < 2; ++i) {
-        if (modeValid_[i]) {
-            if (tcsetattr(i, TCSAFLUSH, &mode_[i]) < 0) {
-                fatalPerror("error restoring terminal mode");
-            }
-        }
-    }
-}
-
-// This function cannot be used from a signal handler.
-void TerminalState::fatal(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    this->fatalv(fmt, ap);
-    va_end(ap);
-}
-
-void TerminalState::fatalv(const char *fmt, va_list ap) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    leaveRawMode(lock);
-    ::fatalv(fmt, ap);
-}
-
-void TerminalState::exitCleanly(int exitStatus) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    leaveRawMode(lock);
-    fflush(stdout);
-    fflush(stderr);
-    // Avoid calling exit, which would call global destructors and destruct the
-    // WakeupFd object.
-    _exit(exitStatus);
 }
 
 static TerminalState g_terminalState;
