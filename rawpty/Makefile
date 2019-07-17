@@ -4,7 +4,7 @@
 # Makefile for wslbridge2's RawPty
 
 STRIP ?= strip
-NAME = RawPty.exe
+NAME = rawpty.exe
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
 LFLAGS = -static -static-libgcc -static-libstdc++
@@ -32,4 +32,4 @@ $(BINDIR) :
 	mkdir -p $(BINDIR)
 
 clean :
-	rm -f $(BINDIR)/$(NAME)
+	rm -f $(BINDIR)/*
