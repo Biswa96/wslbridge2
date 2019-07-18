@@ -3,20 +3,18 @@
  * Copyright (c) 2019 Biswapriyo Nath
  * This file is part of wslbridge2 project
  */
-
 #include <windows.h>
-#include <stdio.h>
 
-#if defined(__CYGWIN__) || defined(__MSYS__)
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
+
 #include <mutex>
 #include "../frontend/TerminalState.hpp"
-#endif
 
 /* VT modes strings in ConHost command options */
 #define VT_PARSE_IO_MODE_XTERM "xterm"
@@ -36,7 +34,8 @@
 
 #define RESIZE_CONHOST_SIGNAL_BUFFER 8
 
-struct RESIZE_PSEUDO_CONSOLE_BUFFER {
+struct RESIZE_PSEUDO_CONSOLE_BUFFER
+{
     unsigned short flag;
     unsigned short width;
     unsigned short height;
@@ -47,7 +46,7 @@ class RawPty
 public:
     RawPty();
     ~RawPty();
-    void CreateConHost(char *program, bool usePty, bool followCur);
+    void CreateConHost(std::string program, bool usePty, bool followCur);
 
 private:
     void *mhStdIn = nullptr;
@@ -86,12 +85,9 @@ RawPty::~RawPty()
 /* global variable */
 static int pipefd[2];
 
-void RawPty::CreateConHost(char *program, bool usePty, bool followCur)
+void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
 {
     COORD size = {};
-
-#if defined(__CYGWIN__) || defined(__MSYS__)
-
     struct winsize winp;
 
     if (isatty(STDIN_FILENO)
@@ -116,21 +112,6 @@ void RawPty::CreateConHost(char *program, bool usePty, bool followCur)
 
     sigaction(SIGWINCH, &act, nullptr);
 
-#else /* msvc or windows */
-
-    DWORD consoleMode;
-    GetConsoleMode(mhStdOut, &consoleMode);
-    SetConsoleMode(mhStdOut, consoleMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-
-    CONSOLE_SCREEN_BUFFER_INFO ConBuffer = {};
-    if (GetConsoleScreenBufferInfo(mhStdOut, &ConBuffer))
-    {
-        size.X = ConBuffer.srWindow.Right - ConBuffer.srWindow.Left + 1;
-        size.Y = ConBuffer.srWindow.Bottom - ConBuffer.srWindow.Top + 1;
-    }
-
-#endif /* cygwin or msys */
-
     char command[200];
     snprintf(
         command,
@@ -141,24 +122,20 @@ void RawPty::CreateConHost(char *program, bool usePty, bool followCur)
         size.Y,
         HandleToUlong(mhReadPipe),
         VT_PARSE_IO_MODE_XTERM_256COLOR,
-        program);
+        program.c_str());
 
     PROCESS_INFORMATION pi = {};
-    STARTUPINFO si = {};
+    STARTUPINFOA si = {};
 
     si.cb = sizeof si;
-    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESIZE;
+    si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = mhStdIn;
     si.hStdOutput = mhStdOut;
     si.hStdError = mhStdOut;
-    si.dwX = size.X;
-    si.dwY = size.Y;
 
     int bRes;
-    bRes = CreateProcess(NULL, command, NULL, NULL, TRUE,
-                         0, NULL, NULL, &si, &pi);
-
-#if defined(__CYGWIN__) || defined(__MSYS__)
+    bRes = CreateProcessA(NULL, command, NULL, NULL, TRUE,
+                          0, NULL, NULL, &si, &pi);
 
     DWORD exitCode;
     struct fd_set fdset;
@@ -192,8 +169,6 @@ void RawPty::CreateConHost(char *program, bool usePty, bool followCur)
     close(pipefd[0]);
     close(pipefd[1]);
 
-#endif /* cygwin or msys */
-
     if (bRes)
         WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hThread);
@@ -205,8 +180,9 @@ int main(int argc, char *argv[])
     if (argc < 2)
         return 1;
 
+    std::string program(argv[1]);
     RawPty rawPty;
-    rawPty.CreateConHost(argv[1], true, true);
+    rawPty.CreateConHost(program, true, true);
 
     return 0;
 }
