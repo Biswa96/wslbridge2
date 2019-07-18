@@ -4,7 +4,8 @@
 [![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg)][2]
 [![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg)]()
 
-Connect WSL2 with Windows programs (in progress).
+Explore various ways to connect WSL with Windows terminal emulators (in progress).
+
 
 ## How to use
 
@@ -14,13 +15,32 @@ Pick up any one of 1. `win_client` & `wsl_server` 2. `win_server` & `wsl_client`
 Compile the Windows part in cygwin or msys2 or msvc and the WSL part in WSL.
 Run the server part first and it will wait for the client connection.
 
+### rawpty: use pseudo console with terminal emulators
+
+`cd` into rawpty folder and run `make` command to compile. The source file
+depends on old wslbridge's frontend and common folder, so do not move or
+delete those. After compiling, run `rawpty.exe wsl.exe` command in mintty.
+It's "raw" because it creates conhost process instead of other Windows program.
+
+<img align=right src=images\Headless_Mode.PNG>
+
 ## Further Readings
 
-* [Make your own integration services][3]
-* [Linux kernel: af_vsock.c][4]
-* [Linux kernel: vm_sockets.h][5]
-* [VMWare: VMCI Socket Programming Guide][6]
-* [man7: vsock(7)][7]
+:fire: Warning! Everything is not documented.
+
+### hvsocket:
+
+  - [Make your own integration services][3]
+  - [Linux kernel: af_vsock.c][4]
+  - [Linux kernel: vm_sockets.h][5]
+  - [VMWare: VMCI Socket Programming Guide][6]
+  - [man7: vsock(7)][7]
+
+### rawpty:
+
+  - [wslbridge](https://github.com/rprichard/wslbridge)
+  - [win32-console-docs](https://github.com/rprichard/win32-console-docs)
+  - [XConPty](https://github.com/Biswa96/XConPty)
 
 ## License
 
@@ -51,4 +71,3 @@ A full copy of the license is provided in [LICENSE](LICENSE).
 [5]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/vm_sockets.h
 [6]: https://www.vmware.com/support/developer/vmci-sdk/
 [7]: http://man7.org/linux/man-pages/man7/vsock.7.html
-
