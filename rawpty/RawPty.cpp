@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -51,8 +52,6 @@ public:
 private:
     void *mhStdIn = nullptr;
     void *mhStdOut = nullptr;
-    void *mhReadPipe = nullptr;
-    void *mhWritePipe = nullptr;
 };
 
 RawPty::RawPty()
@@ -66,24 +65,42 @@ RawPty::RawPty()
 
     DuplicateHandle(hProc, mhStdOut, hProc, &mhStdOut,
                     0, TRUE, DUPLICATE_SAME_ACCESS);
-
-    SECURITY_ATTRIBUTES pipeAttr = {};
-    pipeAttr.nLength = sizeof pipeAttr;
-    pipeAttr.bInheritHandle = false;
-    CreatePipe(&mhReadPipe, &mhWritePipe, &pipeAttr, 0);
-    SetHandleInformation(mhReadPipe, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 }
 
 RawPty::~RawPty()
 {
     if (mhStdIn != nullptr) CloseHandle(mhStdIn);
     if (mhStdOut != nullptr) CloseHandle(mhStdOut);
-    if (mhReadPipe != nullptr) CloseHandle(mhReadPipe);
-    if (mhWritePipe != nullptr) CloseHandle(mhWritePipe);
 }
 
 /* global variable */
-static int pipefd[2];
+static void *hPipe[2];
+
+static void* resize_conpty(void *set)
+{
+    int ret, sig;
+    struct winsize winp;
+    struct RESIZE_PSEUDO_CONSOLE_BUFFER buf;
+
+    while (1)
+    {
+        ret = sigwait((sigset_t*)set, &sig);
+        if (ret != 0 && sig != SIGWINCH)
+            break;
+
+        if (isatty(STDIN_FILENO)
+            && ioctl(STDIN_FILENO, TIOCGWINSZ, &winp) == 0)
+        {
+            buf.width = winp.ws_col;
+            buf.height = winp.ws_row;
+            buf.flag = RESIZE_CONHOST_SIGNAL_BUFFER;
+            if (!WriteFile(hPipe[1], &buf, sizeof buf, nullptr, nullptr))
+                break;
+        }
+    }
+
+    return nullptr;
+}
 
 void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
 {
@@ -101,16 +118,18 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     if (usePty)
         termState.enterRawMode();
 
-    pipe2(pipefd, O_NONBLOCK | O_CLOEXEC);
-    struct sigaction act = {};
-    act.sa_flags = SA_RESTART;
-    act.sa_handler = [](int sig)
-    {
-        char buf = 1;
-        write(pipefd[1], &buf, sizeof buf);
-    }; /* using lambda */
+    SECURITY_ATTRIBUTES pipeAttr = {};
+    pipeAttr.nLength = sizeof pipeAttr;
+    pipeAttr.bInheritHandle = false;
+    CreatePipe(&hPipe[0], &hPipe[1], &pipeAttr, 0);
+    SetHandleInformation(hPipe[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 
-    sigaction(SIGWINCH, &act, nullptr);
+    pthread_t tid;
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGWINCH);
+    pthread_sigmask(SIG_BLOCK, &set, nullptr);
+    pthread_create(&tid, nullptr, &resize_conpty, (void*)&set);
 
     char command[200];
     snprintf(
@@ -120,7 +139,7 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
         followCur ? "--inheritcursor " : "",
         size.X,
         size.Y,
-        HandleToUlong(mhReadPipe),
+        HandleToUlong(hPipe[0]),
         VT_PARSE_IO_MODE_XTERM_256COLOR,
         program.c_str());
 
@@ -137,42 +156,16 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     bRes = CreateProcessA(NULL, command, NULL, NULL, TRUE,
                           0, NULL, NULL, &si, &pi);
 
-    DWORD exitCode;
-    struct fd_set fdset;
-    FD_SET(pipefd[0], &fdset);
-    struct RESIZE_PSEUDO_CONSOLE_BUFFER buf;
-
-    while (1)
-    {
-        if (GetExitCodeProcess(pi.hProcess, &exitCode)
-            && exitCode != STILL_ACTIVE)
-        {
-            break;
-        }
-
-        select(2, &fdset, nullptr, nullptr, nullptr);
-
-        if (isatty(STDIN_FILENO)
-            && ioctl(STDIN_FILENO, TIOCGWINSZ, &winp) == 0)
-        {
-            buf.width = winp.ws_col;
-            buf.height = winp.ws_row;
-            buf.flag = RESIZE_CONHOST_SIGNAL_BUFFER;
-            if (!WriteFile(mhWritePipe, &buf, sizeof buf, nullptr, nullptr))
-                break;
-        }
-    }
+    if (bRes)
+        WaitForSingleObject(pi.hProcess, INFINITE);
 
     if (usePty)
         termState.exitCleanly(0);
 
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    if (bRes)
-        WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
+    CloseHandle(hPipe[0]);
+    CloseHandle(hPipe[1]);
 }
 
 int main(int argc, char *argv[])
