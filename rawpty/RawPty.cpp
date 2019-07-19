@@ -30,8 +30,7 @@
 --height %hu \
 --signal 0x%x \
 --vtmode %s \
---feature pty \
--- %s"
+--feature pty -- "
 
 #define RESIZE_CONHOST_SIGNAL_BUFFER 8
 
@@ -84,10 +83,12 @@ static void* resize_conpty(void *set)
 
     while (1)
     {
+        /* wait for the window resize signal aka. SIGWINCH */
         ret = sigwait((sigset_t*)set, &sig);
         if (ret != 0 && sig != SIGWINCH)
             break;
 
+        /* read terminal window size and write to signal ConHost */
         if (isatty(STDIN_FILENO)
             && ioctl(STDIN_FILENO, TIOCGWINSZ, &winp) == 0)
         {
@@ -107,6 +108,7 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     COORD size = {};
     struct winsize winp;
 
+    /* detect terminal window size */
     if (isatty(STDIN_FILENO)
         && ioctl(STDIN_FILENO, TIOCGWINSZ, &winp) == 0)
     {
@@ -118,12 +120,14 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     if (usePty)
         termState.enterRawMode();
 
+    /* create Windows pipes for signaling ConHost */
     SECURITY_ATTRIBUTES pipeAttr = {};
     pipeAttr.nLength = sizeof pipeAttr;
     pipeAttr.bInheritHandle = false;
     CreatePipe(&hPipe[0], &hPipe[1], &pipeAttr, 0);
     SetHandleInformation(hPipe[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 
+    /* create thread for resizing window with SIGWINCH signal */
     pthread_t tid;
     sigset_t set;
     sigemptyset(&set);
@@ -131,21 +135,23 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     pthread_sigmask(SIG_BLOCK, &set, nullptr);
     pthread_create(&tid, nullptr, &resize_conpty, (void*)&set);
 
-    char command[200];
+    /* create ConHost command line */
+    char dest[200];
     snprintf(
-        command,
+        dest,
         200,
         CONHOST_COMMAND_FORMAT,
         followCur ? "--inheritcursor " : "",
         size.X,
         size.Y,
         HandleToUlong(hPipe[0]),
-        VT_PARSE_IO_MODE_XTERM_256COLOR,
-        program.c_str());
+        VT_PARSE_IO_MODE_XTERM_256COLOR);
+
+    std::string command(dest);
+    command.append(program);
 
     PROCESS_INFORMATION pi = {};
     STARTUPINFOA si = {};
-
     si.cb = sizeof si;
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = mhStdIn;
@@ -153,15 +159,16 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     si.hStdError = mhStdOut;
 
     int bRes;
-    bRes = CreateProcessA(NULL, command, NULL, NULL, TRUE,
-                          0, NULL, NULL, &si, &pi);
+    bRes = CreateProcessA(NULL, &command[0], NULL, NULL,
+                          true, 0, NULL, NULL, &si, &pi);
 
+    /* wait for ConHost to complete */
     if (bRes)
         WaitForSingleObject(pi.hProcess, INFINITE);
 
+    /* cleanup */
     if (usePty)
         termState.exitCleanly(0);
-
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     CloseHandle(hPipe[0]);
@@ -173,7 +180,14 @@ int main(int argc, char *argv[])
     if (argc < 2)
         return 1;
 
-    std::string program(argv[1]);
+    /* append all the agruments except argv[0] */
+    std::string program;
+    for (int i = 1; i < argc; i++)
+    {
+        program.append(argv[i]);
+        program.append(" ");
+    }
+
     RawPty rawPty;
     rawPty.CreateConHost(program, true, true);
 
