@@ -1,15 +1,12 @@
 /* 
-* This file is part of wslbridge2 project
-* Licensed under the GNU General Public License version 3
-*/
+ * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
+ */
 
 #include <winsock2.h>
 #include "hvsocket.h"
 #include <stdio.h>
-
-#ifndef AF_HYPERV
-#define AF_HYPERV 34
-#endif
 
 #define BUFF_SIZE 400
 
@@ -34,9 +31,7 @@ int main(void)
     else
         printf("socket error: %d\n", WSAGetLastError());
 
-    struct _SOCKADDR_HV addr;
-    memset(&addr, 0, sizeof addr);
-
+    struct SOCKADDR_HV addr = { 0 };
     addr.Family = AF_HYPERV;
     GUID VmId = { 0 }; /* enter the last parameter (a GUID) of wslhost.exe process */
     memcpy(&addr.VmId, &VmId, sizeof addr.VmId);

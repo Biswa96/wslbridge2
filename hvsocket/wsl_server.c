@@ -1,7 +1,8 @@
 /* 
-* This file is part of wslbridge2 project
-* Licensed under the GNU General Public License version 3
-*/
+ * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
+ */
 
 #include <string.h>
 #include <stdio.h>
@@ -9,10 +10,6 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <linux/vm_sockets.h>
-
-#ifndef AF_VSOCK
-#define AF_VSOCK 40
-#endif
 
 #define BUFF_SIZE 400
 
@@ -24,9 +21,7 @@ int main(void)
     else
         printf("socket: %d\n", sockfd);
 
-    struct sockaddr_vm addr;
-    memset(&addr, 0, sizeof addr);
-
+    struct sockaddr_vm addr = { 0 };
     addr.svm_family = AF_VSOCK;
     addr.svm_port = VMADDR_PORT_ANY;
     addr.svm_cid = VMADDR_CID_ANY;

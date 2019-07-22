@@ -1,8 +1,13 @@
+/* Taken from Windows Kits\10\Include\10.0.18362.0\shared\hvsocket.h */
+
 #ifndef HVSOCKET_H
 #define HVSOCKET_H
 
 #include <initguid.h>
-#include <ws2def.h>
+
+#ifndef AF_HYPERV
+#define AF_HYPERV 34
+#endif
 
 #define HVSOCKET_CONNECT_TIMEOUT 0x01
 #define HVSOCKET_CONNECT_TIMEOUT_MAX 300000
@@ -22,22 +27,22 @@ DEFINE_GUID(HV_GUID_VSOCK_TEMPLATE, 0x00000000, 0xfacb, 0x11e6, 0xbd, 0x58, 0x64
 
 #define HV_PROTOCOL_RAW 1
 
-typedef struct _SOCKADDR_HV
+struct SOCKADDR_HV
 {
-    ADDRESS_FAMILY Family;
-    USHORT Reserved;
+    unsigned short Family;
+    unsigned short Reserved;
     GUID VmId;
     GUID ServiceId;
-} SOCKADDR_HV, *PSOCKADDR_HV;
+};
 
 #define HVSOCKET_ADDRESS_FLAG_PASSTHRU 0x00000001
 
-typedef struct _HVSOCKET_ADDRESS_INFO
+struct HVSOCKET_ADDRESS_INFO
 {
     GUID SystemId;
     GUID VirtualMachineId;
     GUID SiloId;
-    ULONG Flags;
-} HVSOCKET_ADDRESS_INFO, *PHVSOCKET_ADDRESS_INFO;
+    unsigned int Flags;
+};
 
-#endif
+#endif /* HVSOCKET_H */
