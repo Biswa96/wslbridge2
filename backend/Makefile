@@ -1,7 +1,7 @@
 # Makefile for wslbridge2 backend
 
 STRIP ?= strip
-NAME = wslbridge-backend
+NAME = wslbridge2-backend
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
 LFLAGS = -lutil -pthread -static-libgcc -static-libstdc++

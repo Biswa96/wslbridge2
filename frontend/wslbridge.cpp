@@ -47,7 +47,7 @@
 #include "LocalSock.hpp"
 #include "TerminalState.hpp"
 
-#define BACKEND_PROGRAM "wslbridge-backend"
+#define BACKEND_PROGRAM "wslbridge2-backend"
 
 namespace {
 

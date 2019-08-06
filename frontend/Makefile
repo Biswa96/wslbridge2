@@ -1,7 +1,7 @@
 # Makefile for wslbridge2 frontend
 
 STRIP ?= strip
-NAME = wslbridge.exe
+NAME = wslbridge2.exe
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
 LFLAGS = -static -static-libgcc -static-libstdc++
