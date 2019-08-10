@@ -6,15 +6,13 @@
 
 #include <windows.h>
 
-#include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
+#include <string>
 #include "../wslbridge/TerminalState.hpp"
 
 /* VT modes strings in ConHost command options */
@@ -23,16 +21,11 @@
 #define VT_PARSE_IO_MODE_XTERM_256COLOR "xterm-256color"
 #define VT_PARSE_IO_MODE_WIN_TELNET "win-telnet"
 
+/* remove headless option to reveal ConHost window */
 #define CONHOST_COMMAND_FORMAT \
-"conhost.exe \
---headless %s\
---width %hu \
---height %hu \
---signal 0x%x \
---vtmode %s \
---feature pty -- "
+"\\\\?\\%s\\System32\\conhost.exe --headless %s--width %hu --height %hu --signal 0x%x --vtmode %s --feature pty -- "
 
-#define RESIZE_CONHOST_SIGNAL_BUFFER 8
+#define RESIZE_CONHOST_SIGNAL_FLAG 8
 
 struct RESIZE_PSEUDO_CONSOLE_BUFFER
 {
@@ -77,15 +70,15 @@ static void *hPipe[2];
 
 static void* resize_conpty(void *set)
 {
-    int ret, sig;
+    int ret, signum;
     struct winsize winp;
     struct RESIZE_PSEUDO_CONSOLE_BUFFER buf;
 
     while (1)
     {
         /* wait for the window resize signal aka. SIGWINCH */
-        ret = sigwait((sigset_t*)set, &sig);
-        if (ret != 0 && sig != SIGWINCH)
+        ret = sigwait((sigset_t *)set, &signum);
+        if (ret != 0 || signum != SIGWINCH)
             break;
 
         /* read terminal window size and write to signal ConHost */
@@ -94,7 +87,7 @@ static void* resize_conpty(void *set)
         {
             buf.width = winp.ws_col;
             buf.height = winp.ws_row;
-            buf.flag = RESIZE_CONHOST_SIGNAL_BUFFER;
+            buf.flag = RESIZE_CONHOST_SIGNAL_FLAG;
             if (!WriteFile(hPipe[1], &buf, sizeof buf, nullptr, nullptr))
                 break;
         }
@@ -133,19 +126,27 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     sigemptyset(&set);
     sigaddset(&set, SIGWINCH);
     pthread_sigmask(SIG_BLOCK, &set, nullptr);
-    pthread_create(&tid, nullptr, &resize_conpty, (void*)&set);
+    pthread_create(&tid, nullptr, &resize_conpty, (void *)&set);
 
     /* create ConHost command line */
-    char dest[200];
+    void *HeapHandle = GetProcessHeap();
+    unsigned int nSize = ExpandEnvironmentStringsA("%SystemRoot%", nullptr, 0);
+    char *sysRoot = (char *)HeapAlloc(HeapHandle, 0, nSize * sizeof(char));
+    ExpandEnvironmentStringsA("%SystemRoot%", sysRoot, nSize);
+
+    char dest[512];
     snprintf(
         dest,
-        200,
+        512,
         CONHOST_COMMAND_FORMAT,
+        sysRoot,
         followCur ? "--inheritcursor " : "",
         size.X,
         size.Y,
         HandleToUlong(hPipe[0]),
         VT_PARSE_IO_MODE_XTERM_256COLOR);
+
+    HeapFree(HeapHandle, 0, sysRoot);
 
     std::string command(dest);
     command.append(program);
@@ -165,22 +166,27 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     /* wait for ConHost to complete */
     if (bRes)
         WaitForSingleObject(pi.hProcess, INFINITE);
+    else
+        fprintf(stderr, "CreateProcess: %d\n", GetLastError());
 
     /* cleanup */
-    if (usePty)
-        termState.exitCleanly(0);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     CloseHandle(hPipe[0]);
     CloseHandle(hPipe[1]);
+    if (usePty)
+        termState.exitCleanly(0);
 }
 
 int main(int argc, char *argv[])
 {
     if (argc < 2)
+    {
+        fprintf(stderr, "No executable provided.\n");
         return 1;
+    }
 
-    /* append all the agruments except argv[0] */
+    /* append all the arguments except argv[0] */
     std::string program;
     for (int i = 1; i < argc; i++)
     {
