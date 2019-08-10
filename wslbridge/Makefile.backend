@@ -1,3 +1,7 @@
+# This file is part of wslbridge2 project
+# Licensed under the GNU General Public License version 3
+# Copyright (C) 2019 Biswapriyo Nath
+
 # Makefile for wslbridge2 backend
 
 STRIP ?= strip
@@ -18,7 +22,7 @@ $(NAME) : $(BINS)
 $(BINDIR)/wslbridge-backend.o : wslbridge-backend.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/SocketIo.o : ../common/SocketIo.cpp
+$(BINDIR)/SocketIo.o : SocketIo.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR) :

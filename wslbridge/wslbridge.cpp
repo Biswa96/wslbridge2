@@ -4,9 +4,10 @@
  * Copyright (c) 2017-2018 Google LLC
  */
 
-/*
- * GNU GENERAL PUBLIC LICENSE Version 3 (GNU GPL v3)
- * Copyright (c) 2019 Biswapriyo Nath
+/* 
+ * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
  */
 
 #include <windows.h>
@@ -43,7 +44,7 @@
 #include <utility>
 #include <vector>
 
-#include "../common/SocketIo.hpp"
+#include "SocketIo.hpp"
 #include "LocalSock.hpp"
 #include "TerminalState.hpp"
 

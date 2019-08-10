@@ -1,7 +1,8 @@
-# GNU GENERAL PUBLIC LICENSE Version 3 (GNU GPL v3)
-# Copyright (c) 2019 Biswapriyo Nath
+# This file is part of wslbridge2 project
+# Licensed under the GNU General Public License version 3
+# Copyright (C) 2019 Biswapriyo Nath
 
-# Makefile for wslbridge2's RawPty
+# Makefile for wslbridge2 rawpty
 
 STRIP ?= strip
 NAME = rawpty.exe
@@ -9,7 +10,7 @@ BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
 LFLAGS = -pthread -static -static-libgcc -static-libstdc++
 BINS = \
-$(BINDIR)/RawPty.obj \
+$(BINDIR)/rawpty.obj \
 $(BINDIR)/SocketIo.obj \
 $(BINDIR)/TerminalState.obj
 
@@ -19,17 +20,17 @@ $(NAME) : $(BINS)
 	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
 
-$(BINDIR)/RawPty.obj : RawPty.cpp
+$(BINDIR)/rawpty.obj : rawpty.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/SocketIo.obj : ../common/SocketIo.cpp
+$(BINDIR)/SocketIo.obj : ../wslbridge/SocketIo.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/TerminalState.obj : ../frontend/TerminalState.cpp
+$(BINDIR)/TerminalState.obj : ../wslbridge/TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR) :
 	mkdir -p $(BINDIR)
 
 clean :
-	rm -f $(BINDIR)/*
+	rm -f $(BINDIR)/$(NAME)

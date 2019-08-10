@@ -17,9 +17,7 @@
 #include <unistd.h>
 
 #include "../hvsocket/hvsocket.h"
-
-#include <mutex>
-#include "../frontend/TerminalState.hpp"
+#include "../wslbridge/TerminalState.hpp"
 
 #define PORT_NUM 54321
 #define BUFF_SIZE 400

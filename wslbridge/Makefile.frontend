@@ -1,3 +1,7 @@
+# This file is part of wslbridge2 project
+# Licensed under the GNU General Public License version 3
+# Copyright (C) 2019 Biswapriyo Nath
+
 # Makefile for wslbridge2 frontend
 
 STRIP ?= strip
@@ -23,7 +27,7 @@ $(NAME) : $(BINS)
 $(BINDIR)/LocalSock.obj : LocalSock.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/SocketIo.obj : ../common/SocketIo.cpp
+$(BINDIR)/SocketIo.obj : SocketIo.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/TerminalState.obj : TerminalState.cpp

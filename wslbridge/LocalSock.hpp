@@ -1,3 +1,9 @@
+/* 
+ * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
+ */
+
 #ifndef LOCALSOCK_HPP
 #define LOCALSOCK_HPP
 

@@ -1,8 +1,9 @@
-/*
- * GNU GENERAL PUBLIC LICENSE Version 3 (GNU GPL v3)
- * Copyright (c) 2019 Biswapriyo Nath
+/* 
  * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
  */
+
 #include <windows.h>
 
 #include <fcntl.h>
@@ -14,8 +15,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <mutex>
-#include "../frontend/TerminalState.hpp"
+#include "../wslbridge/TerminalState.hpp"
 
 /* VT modes strings in ConHost command options */
 #define VT_PARSE_IO_MODE_XTERM "xterm"

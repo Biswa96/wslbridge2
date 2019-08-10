@@ -1,3 +1,9 @@
+/* 
+ * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
+ */
+
 #include <assert.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
