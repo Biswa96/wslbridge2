@@ -12,16 +12,11 @@
 
 #include <windows.h>
 
-#include <arpa/inet.h>
 #include <assert.h>
-#include <ctype.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <locale.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,68 +24,26 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <termios.h>
 #include <unistd.h>
 #include <wchar.h>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include "Helpers.hpp"
 #include "SocketIo.hpp"
 #include "LocalSock.hpp"
 #include "TerminalState.hpp"
 
-#define BACKEND_PROGRAM "wslbridge2-backend"
-
-namespace {
-
 const int32_t kOutputWindowSize = 8192;
 
 static WakeupFd *g_wakeupFd = nullptr;
-
-static TermSize terminalSize() {
-    winsize ws = {};
-    if (isatty(STDIN_FILENO) && ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
-        return TermSize { ws.ws_col, ws.ws_row };
-    } else {
-        return TermSize { 80, 24 };
-    }
-}
-
-static std::wstring mbsToWcs(const std::string &s) {
-    const size_t len = mbstowcs(nullptr, s.c_str(), 0);
-    if (len == static_cast<size_t>(-1)) {
-        fatal("error: mbsToWcs: invalid string\n");
-    }
-    std::wstring ret;
-    ret.resize(len);
-    const size_t len2 = mbstowcs(&ret[0], s.c_str(), len);
-    assert(len == len2);
-    return ret;
-}
-
-static std::string wcsToMbs(const std::wstring &s, bool emptyOnError=false) {
-    const size_t len = wcstombs(nullptr, s.c_str(), 0);
-    if (len == static_cast<size_t>(-1)) {
-        if (emptyOnError) {
-            return {};
-        }
-        fatal("error: wcsToMbs: invalid string\n");
-    }
-    std::string ret;
-    ret.resize(len);
-    const size_t len2 = wcstombs(&ret[0], s.c_str(), len);
-    assert(len == len2);
-    return ret;
-}
 
 static TerminalState g_terminalState;
 
@@ -249,146 +202,6 @@ static void mainLoop(const std::string &spawnCwd,
     g_terminalState.exitCleanly(exitStatus);
 }
 
-static bool pathExists(const std::wstring &path) {
-    return GetFileAttributesW(path.c_str()) != 0xFFFFFFFF;
-}
-
-static std::wstring dirname(const std::wstring &path) {
-    std::wstring::size_type pos = path.find_last_of(L"\\/");
-    if (pos == std::wstring::npos) {
-        return L"";
-    } else {
-        return path.substr(0, pos);
-    }
-}
-
-static HMODULE getCurrentModule() {
-    HMODULE module;
-    if (!GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                reinterpret_cast<LPCWSTR>(getCurrentModule),
-                &module)) {
-        fatal("error: GetModuleHandleEx failed\n");
-    }
-    return module;
-}
-
-static std::wstring getModuleFileName(HMODULE module) {
-    const int bufsize = 4096;
-    wchar_t path[bufsize];
-    int size = GetModuleFileNameW(module, path, bufsize);
-    assert(size != 0 && size != bufsize);
-    return std::wstring(path);
-}
-
-static std::wstring findBackendProgram(const std::string &customBackendPath) {
-    std::wstring ret;
-    if (!customBackendPath.empty()) {
-        char *winPath = static_cast<char*>(
-            cygwin_create_path(CCP_POSIX_TO_WIN_A, customBackendPath.c_str()));
-        if (winPath == nullptr) {
-            fatalPerror(("error: bad path: '" + customBackendPath + "'").c_str());
-        }
-        ret = mbsToWcs(winPath);
-        free(winPath);
-    } else {
-        const auto progDir = dirname(getModuleFileName(getCurrentModule()));
-        ret = progDir + (L"\\" BACKEND_PROGRAM);
-    }
-    if (!pathExists(ret)) {
-        fatal("error: '%s' backend program is missing\n",
-            wcsToMbs(ret).c_str());
-    }
-    return ret;
-}
-
-static wchar_t lowerDrive(wchar_t ch) {
-    if (ch >= L'a' && ch <= L'z') {
-        return ch;
-    } else if (ch >= L'A' && ch <= 'Z') {
-        return ch - L'A' + L'a';
-    } else {
-        return L'\0';
-    }
-}
-
-static std::pair<std::wstring, std::wstring>
-normalizePath(const std::wstring &path) {
-    const auto getFinalPathName = [&](HANDLE h) -> std::wstring {
-        std::wstring ret;
-        ret.resize(MAX_PATH + 1);
-        while (true) {
-            const auto sz = GetFinalPathNameByHandleW(h, &ret[0], ret.size(), 0);
-            if (sz == 0) {
-                fatal("error: GetFinalPathNameByHandle failed on '%s'\n",
-                    wcsToMbs(path).c_str());
-            } else if (sz < ret.size()) {
-                ret.resize(sz);
-                return ret;
-            } else {
-                assert(sz > ret.size());
-                ret.resize(sz);
-            }
-        }
-    };
-    const auto h = CreateFileW(
-        path.c_str(),
-        GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        nullptr,
-        OPEN_EXISTING, 0, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        fatal("error: could not open '%s'\n", wcsToMbs(path).c_str());
-    }
-    auto npath = getFinalPathName(h);
-    std::array<wchar_t, MAX_PATH + 1> fsname;
-    fsname.back() = L'\0';
-    if (!GetVolumeInformationByHandleW(
-            h, nullptr, 0, nullptr, nullptr, nullptr,
-            &fsname[0], fsname.size())) {
-        fsname[0] = L'\0';
-    }
-    CloseHandle(h);
-    // Example of GetFinalPathNameByHandle result:
-    //   \\?\C:\cygwin64\bin\wslbridge-backend
-    //   0123456
-    //   \\?\UNC\server\share\file
-    //   01234567
-    if (npath.size() >= 7 &&
-            npath.substr(0, 4) == L"\\\\?\\" &&
-            lowerDrive(npath[4]) &&
-            npath.substr(5, 2) == L":\\") {
-        // Strip off the atypical \\?\ prefix.
-        npath = npath.substr(4);
-    } else if (npath.substr(0, 8) == L"\\\\?\\UNC\\") {
-        // Strip off the \\\\?\\UNC\\ prefix and replace it with \\.
-        npath = L"\\\\" + npath.substr(8);
-    }
-    return std::make_pair(std::move(npath), fsname.data());
-}
-
-static std::wstring findSystemProgram(const wchar_t *name) {
-    std::array<wchar_t, MAX_PATH> windir;
-    windir[0] = L'\0';
-    if (GetWindowsDirectoryW(windir.data(), windir.size()) == 0) {
-        fatal("error: GetWindowsDirectory call failed\n");
-    }
-    const wchar_t *const kPart32 = L"\\System32\\";
-    const auto path = [&](const wchar_t *part) -> std::wstring {
-        return std::wstring(windir.data()) + part + name;
-    };
-
-    const auto ret = path(kPart32);
-    if (pathExists(ret)) {
-        return ret;
-    } else {
-        fatal("error: '%s' does not exist\n"
-              "note: Ubuntu-on-Windows must be installed\n",
-              wcsToMbs(ret).c_str());
-    }
-}
-
 static void usage(const char *prog) {
     printf("Usage: %s [options] [--] [command]...\n", prog);
     printf("Runs a program within a Windows Subsystem for Linux (WSL) pty\n");
@@ -438,61 +251,6 @@ public:
 private:
     std::vector<std::pair<std::wstring, std::wstring>> pairs_;
 };
-
-static void appendWslArg(std::wstring &out, const std::wstring &arg) {
-    if (!out.empty()) {
-        out.push_back(L' ');
-    }
-    const auto isCharSafe = [](wchar_t ch) -> bool {
-        switch (ch) {
-            case L'%':
-            case L'+':
-            case L',':
-            case L'-':
-            case L'.':
-            case L'/':
-            case L':':
-            case L'=':
-            case L'@':
-            case L'_':
-            case L'{':
-            case L'}':
-                return true;
-            default:
-                return (ch >= L'0' && ch <= L'9') ||
-                       (ch >= L'a' && ch <= L'z') ||
-                       (ch >= L'A' && ch <= L'Z');
-        }
-    };
-    if (arg.empty()) {
-        out.append(L"''");
-        return;
-    }
-    if (std::all_of(arg.begin(), arg.end(), isCharSafe)) {
-        out.append(arg);
-        return;
-    }
-    bool inQuote = false;
-    const auto enterQuote = [&](bool newInQuote) {
-        if (inQuote != newInQuote) {
-            out.push_back(L'\'');
-            inQuote = newInQuote;
-        }
-    };
-    enterQuote(true);
-    for (auto ch : arg) {
-        if (ch == L'\'') {
-            enterQuote(false);
-            out.append(L"\\'");
-            enterQuote(true);
-        } else if (isCharSafe(ch)) {
-            out.push_back(ch);
-        } else {
-            out.push_back(ch);
-        }
-    }
-    enterQuote(false);
-}
 
 static std::string errorMessageToString(DWORD err) {
     // Use FormatMessageW rather than FormatMessageA, because we want to use
@@ -610,8 +368,9 @@ private:
 // new WSL bash console and send it a return keypress.
 //
 // The HANDLE must be inheritable.
-static void spawnPressReturnProcess(HANDLE wslProcess) {
-    const auto exePath = getModuleFileName(getCurrentModule());
+static void spawnPressReturnProcess(HANDLE wslProcess)
+{
+    const std::wstring exePath = getModuleFileName(getCurrentModule());
     std::wstring cmdline;
     cmdline.append(L"\"");
     cmdline.append(exePath);
@@ -709,9 +468,8 @@ static std::string stripTrailing(std::string str) {
     return str;
 }
 
-} // namespace
-
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     setlocale(LC_ALL, "");
     cygwin_internal(CW_SYNC_WINENV);
     g_wakeupFd = new WakeupFd();
@@ -740,10 +498,13 @@ int main(int argc, char *argv[]) {
         { "backend",        true,  nullptr,     'b' },
         { nullptr,          false, nullptr,     0   },
     };
-    while ((c = getopt_long(argc, argv, "+b:C:d:e:hlLtT", kOptionTable, nullptr)) != -1) {
-        switch (c) {
+
+    while ((c = getopt_long(argc, argv, "+b:C:d:e:hlLtT", kOptionTable, nullptr)) != -1)
+    {
+        switch (c)
+        {
             case 0:
-                // Ignore long option.
+                /* Ignore long option. */
                 break;
             case 'e': {
                 const char *eq = strchr(optarg, '=');
@@ -790,9 +551,8 @@ int main(int argc, char *argv[]) {
                 break;
             case 'b':
                 customBackendPath = optarg;
-                if (customBackendPath.empty()) {
+                if (customBackendPath.empty())
                     fatal("error: the --backend option requires a non-empty string argument\n");
-                }
                 break;
             default:
                 fatal("Try '%s --help' for more information.\n", argv[0]);
@@ -840,13 +600,14 @@ int main(int argc, char *argv[]) {
         errorSocket = std::unique_ptr<LocalSock>(new LocalSock);
     }
 
-    const auto wslPath = findSystemProgram(L"wsl.exe");
-    const auto backendPathInfo = normalizePath(findBackendProgram(customBackendPath));
-    const auto backendPathWin = backendPathInfo.first;
-    const auto fsname = backendPathInfo.second;
-    const auto initialSize = terminalSize();
+    const std::wstring wslPath = findSystemProgram(L"wsl.exe");
+    const auto backendPathInfo = normalizePath(
+                    findBackendProgram(customBackendPath, L"wslbridge2-backend"));
+    const std::wstring backendPathWin = backendPathInfo.first;
+    const std::wstring fsname = backendPathInfo.second;
+    const struct TermSize initialSize = terminalSize();
 
-    // Prepare the backend command line.
+    /* Prepare the backend command line. */
     std::wstring wslCmdLine;
     wslCmdLine.append(L"\"$(wslpath -u");
     appendWslArg(wslCmdLine, backendPathWin);
@@ -898,7 +659,8 @@ int main(int argc, char *argv[]) {
     cmdLine.append(L"\"");
     cmdLine.append(wslPath);
     cmdLine.append(L"\"");
-    if (!distroName.empty()) {
+    if (!distroName.empty())
+    {
         cmdLine.append(L" -d ");
         cmdLine.append(mbsToWcs(distroName));
     }

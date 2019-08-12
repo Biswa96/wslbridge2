@@ -7,9 +7,10 @@
 STRIP ?= strip
 NAME = wslbridge2.exe
 BINDIR = ../bin
-CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
-LFLAGS = -static -static-libgcc -static-libstdc++
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c++11 -Wall
+LFLAGS = -static-libgcc -static-libstdc++
 BINS = \
+$(BINDIR)/Helpers.obj \
 $(BINDIR)/LocalSock.obj \
 $(BINDIR)/SocketIo.obj \
 $(BINDIR)/TerminalState.obj \
@@ -23,6 +24,9 @@ all : $(BINDIR) $(NAME)
 $(NAME) : $(BINS)
 	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
+
+$(BINDIR)/Helpers.obj : Helpers.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/LocalSock.obj : LocalSock.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
