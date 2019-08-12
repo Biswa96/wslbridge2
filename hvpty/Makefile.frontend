@@ -1,0 +1,52 @@
+# This file is part of wslbridge2 project
+# Licensed under the GNU General Public License version 3
+# Copyright (C) 2019 Biswapriyo Nath
+
+# Makefile for hvpty frontend
+
+STRIP ?= strip
+NAME = hvpty.exe
+BINDIR = ../bin
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c++11 -Wall
+LFLAGS = -pthread -static -static-libgcc -static-libstdc++
+LIBS = -lws2_32 -lole32
+BINS = \
+$(BINDIR)/GetConsoleHandle.obj \
+$(BINDIR)/GetVmId.obj \
+$(BINDIR)/Helpers.obj \
+$(BINDIR)/hvpty.obj \
+$(BINDIR)/SocketIo.obj \
+$(BINDIR)/TerminalState.obj
+
+# Windows header specific options
+CCOPT = -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE
+
+all : $(BINDIR) $(NAME)
+
+$(NAME) : $(BINS)
+	$(CXX) $^ $(LFLAGS) $(LIBS) -o $(BINDIR)/$@
+	$(STRIP) $(BINDIR)/$@
+
+$(BINDIR)/GetConsoleHandle.obj : GetConsoleHandle.S
+	$(AS) -c --64 $< -o $@
+
+$(BINDIR)/GetVmId.obj : GetVmId.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/Helpers.obj : ../wslbridge/Helpers.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
+
+$(BINDIR)/hvpty.obj : hvpty.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
+
+$(BINDIR)/SocketIo.obj : ../wslbridge/SocketIo.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/TerminalState.obj : ../wslbridge/TerminalState.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR) :
+	mkdir -p $(BINDIR)
+
+clean :
+	rm -f $(BINDIR)/$(NAME)

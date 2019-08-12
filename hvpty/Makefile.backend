@@ -1,0 +1,28 @@
+# This file is part of wslbridge2 project
+# Licensed under the GNU General Public License version 3
+# Copyright (C) 2019 Biswapriyo Nath
+
+# Makefile for hvpty backend
+
+STRIP ?= strip
+NAME = hvpty-backend
+BINDIR = ../bin
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c99 -Wall
+LFLAGS = -lutil -static-libgcc
+BINS = \
+$(BINDIR)/hvpty-backend.o
+
+all : $(BINDIR) $(NAME)
+
+$(NAME) : $(BINS)
+	$(CC) $^ $(LFLAGS) -o $(BINDIR)/$@
+	$(STRIP) $(BINDIR)/$@
+
+$(BINDIR)/hvpty-backend.o : hvpty-backend.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+$(BINDIR) :
+	mkdir -p $(BINDIR)
+
+clean :
+	rm -f $(BINDIR)/$(NAME)

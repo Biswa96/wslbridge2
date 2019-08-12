@@ -8,10 +8,10 @@ all:
 ifeq ($(OS), Windows_NT)
 	cd wslbridge; $(MAKE) -f Makefile.frontend
 	cd rawpty; $(MAKE) -f Makefile
-	cd hvpty; $(MAKE) -f Makefile
+	cd hvpty; $(MAKE) -f Makefile.frontend
 else
 	cd wslbridge; $(MAKE) -f Makefile.backend
-	cd hvpty; $(MAKE) -f Makefile
+	cd hvpty; $(MAKE) -f Makefile.backend
 endif
 
 clean:

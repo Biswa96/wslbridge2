@@ -6,10 +6,12 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <getopt.h>
 #include <poll.h>
 #include <pty.h>
 #include <pwd.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -21,10 +23,9 @@
 #include <linux/vm_sockets.h>
 
 #define PORT_NUM 54321
-#define BUFF_SIZE 400
 
 /* return created client socket to send */
-int Initialize(void)
+int Initialize(unsigned int initPort)
 {
     int ret;
 
@@ -35,7 +36,7 @@ int Initialize(void)
     memset(&addr, 0, sizeof addr);
 
     addr.svm_family = AF_VSOCK;
-    addr.svm_port = PORT_NUM;
+    addr.svm_port = initPort;
     addr.svm_cid = VMADDR_CID_HOST;
     ret = connect(cSock, (struct sockaddr *)&addr, sizeof addr);
     assert(ret == 0);
@@ -44,7 +45,7 @@ int Initialize(void)
 }
 
 /* return socket and random port number */
-int create_vmsock(unsigned int *port)
+int create_vmsock(unsigned int *randomPort)
 {
     int ret;
 
@@ -67,8 +68,8 @@ int create_vmsock(unsigned int *port)
     ret = listen(sSock, -1);
     assert(ret == 0);
 
-    *port = addr.svm_port;
-
+    /* return port number and socket to caller */
+    *randomPort = addr.svm_port;
     return sSock;
 }
 
@@ -84,16 +85,55 @@ union IoSockets
     };
 };
 
-int main(void)
+int main(int argc, char *argv[])
 {
     int ret;
+    struct winsize winp;
+    unsigned int initPort = PORT_NUM;
+    int c = 0;
 
-    int client_sock = Initialize();
+    const struct option kOptionTable[] = {
+        { "col",  required_argument, 0, 'c' },
+        { "row",  required_argument, 0, 'r' },
+        { "port", required_argument, 0, 'p' },
+        { 0,      no_argument,       0,  0  },
+    };
 
-    unsigned int port = 0;
-    int server_sock = create_vmsock(&port);
+    while ((c = getopt_long(argc, argv, "+c:r:p:", kOptionTable, NULL)) != -1)
+    {
+        switch (c)
+        {
+            case 'c':
+                winp.ws_col = atoi(optarg);
+                break;
+            case 'r':
+                winp.ws_row = atoi(optarg);
+                break;
+            case 'p':
+                initPort = atoi(optarg);
+                break;
+            default:
+                exit(1);
+        }
+    }
 
-    ret = send(client_sock, &port, sizeof port, 0);
+    if (winp.ws_col == 0 || winp.ws_row == 0)
+    {
+        ret = ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
+        assert(ret == 0);
+    }
+
+#if defined (DEBUG) || defined (_DEBUG)
+    printf("cols: %d row: %d port: %d\n",
+           winp.ws_col,winp.ws_row, initPort);
+#endif
+
+    int client_sock = Initialize(initPort);
+
+    unsigned int randomPort = 0;
+    int server_sock = create_vmsock(&randomPort);
+
+    ret = send(client_sock, &randomPort, sizeof randomPort, 0);
     assert(ret > 0);
 
     union IoSockets ioSockets;
@@ -104,16 +144,12 @@ int main(void)
         assert(ioSockets.sock[i] > 0);
     }
 
-    struct winsize winp;
-    ret = ioctl(0, TIOCGWINSZ, &winp);
-    assert(ret == 0);
-
     struct passwd *pwd = getpwuid(getuid());
     if (pwd == NULL)
         perror("getpwuid");
 
-    int masterfd;
-    pid_t child = forkpty(&masterfd, NULL, NULL, &winp);
+    int mfd;
+    pid_t child = forkpty(&mfd, NULL, NULL, &winp);
 
     if (child > 0) /* parent or master */
     {
@@ -129,7 +165,7 @@ int main(void)
         struct pollfd fds[6] = {
                 { ioSockets.inputSock,    POLLIN, 0 },
                 { ioSockets.controlSock,  POLLIN, 0 },
-                { masterfd,               POLLIN, 0 },
+                { mfd,                    POLLIN, 0 },
                 { sigfd,                  POLLIN, 0 }
             };
 
@@ -144,7 +180,7 @@ int main(void)
             {
                 ret = recv(ioSockets.inputSock, data, sizeof data, 0);
                 assert(ret > 0);
-                ret = write(masterfd, &data, ret);
+                ret = write(mfd, &data, ret);
             }
 
             /* resize window from receiving buffers */
@@ -156,13 +192,13 @@ int main(void)
 
                 winp.ws_row = buff[0];
                 winp.ws_col = buff[1];
-                ret = ioctl(masterfd, TIOCSWINSZ, &winp);
+                ret = ioctl(mfd, TIOCSWINSZ, &winp);
                 assert(ret == 0);
             }
 
             if (fds[2].revents & POLLIN)
             {
-                ret = read(masterfd, data, sizeof data);
+                ret = read(mfd, data, sizeof data);
                 assert(ret > 0);
                 ret = send(ioSockets.outputSock, data, ret, 0);
             }
@@ -184,7 +220,7 @@ int main(void)
         }
 
         close(sigfd);
-        close(masterfd);
+        close(mfd);
     }
     else if (child == 0) /* child or slave */
     {
