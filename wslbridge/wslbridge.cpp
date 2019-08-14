@@ -207,20 +207,20 @@ static void usage(const char *prog) {
     printf("Runs a program within a Windows Subsystem for Linux (WSL) pty\n");
     printf("\n");
     printf("Options:\n");
-    printf("  -C WSLDIR     Changes the working directory to WSLDIR first.\n");
-    printf("                An initial '~' indicates the WSL home directory.\n");
+    printf("  -b, --backend BACKEND\n");
+    printf("                Overrides the default path of wslbridge2-backend to BACKEND\n");
+    printf("  -C, --directory WINDIR\n");
+    printf("                Changes the working directory to WINDIR first\n");
+    printf("  -d, --distribution Distribution Name\n");
+    printf("                Run the specified distribution.\n");
     printf("  -e VAR        Copies VAR into the WSL environment.\n");
     printf("  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n");
+    printf("  -h, --help    Show this usage information\n");
     printf("  -l            Start a login shell.\n");
     printf("  --no-login    Do not start a login shell.\n");
     printf("  -T            Do not use a pty.\n");
     printf("  -t            Use a pty (as long as stdin is a tty).\n");
     printf("  -t -t         Force a pty (even if stdin is not a tty).\n");
-    printf("  --distro      Distribution Name.\n");
-    printf("                Run the specified distribution.\n");
-    printf("  --backend BACKEND\n");
-    printf("                Overrides the default path to wslbridge-backend. BACKEND is a\n");
-    printf("                Cygwin-style path (not a WSL path).\n");
     exit(0);
 }
 
@@ -490,16 +490,19 @@ int main(int argc, char *argv[])
     if (argv[0][0] == '-') {
         loginMode = LoginMode::Yes;
     }
-    const struct option kOptionTable[] = {
-        { "help",           false, nullptr,     'h' },
-        { "debug-fork",     false, &debugFork,  1   },
-        { "distro",         true,  nullptr,     'd' },
-        { "no-login",       false, nullptr,     'L' },
-        { "backend",        true,  nullptr,     'b' },
-        { nullptr,          false, nullptr,     0   },
+
+    const char shortopts[] = "+b:C:d:e:hlLtT";
+    const struct option longopts[] = {
+        { "backend",        required_argument,  nullptr,     'b' },
+        { "directory",      required_argument,  nullptr,     'C' },
+        { "distribution",   required_argument,  nullptr,     'd' },
+        { "help",           no_argument,        nullptr,     'h' },
+        { "debug-fork",     no_argument,       &debugFork,    1  },
+        { "no-login",       no_argument,        nullptr,     'L' },
+        { nullptr,          no_argument,        nullptr,      0  },
     };
 
-    while ((c = getopt_long(argc, argv, "+b:C:d:e:hlLtT", kOptionTable, nullptr)) != -1)
+    while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
         switch (c)
         {
@@ -647,9 +650,7 @@ int main(int argc, char *argv[])
     for (const auto &envPair : env.pairs()) {
         appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
     }
-    if (!spawnCwd.empty()) {
-        appendWslArg(wslCmdLine, L"-C" + mbsToWcs(spawnCwd));
-    }
+
     appendWslArg(wslCmdLine, L"--");
     for (int i = optind; i < argc; ++i) {
         appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
@@ -664,6 +665,16 @@ int main(int argc, char *argv[])
         cmdLine.append(L" -d ");
         cmdLine.append(mbsToWcs(distroName));
     }
+
+   /* this option is taken from registry
+    * HKCU\Directory\Background\shell\WSL\command
+    */
+    if (!spawnCwd.empty())
+    {
+        cmdLine.append(L" --cd ");
+        cmdLine.append(mbsToWcs(spawnCwd));
+    }
+
     cmdLine.append(L" bash -c ");
     appendWslArg(cmdLine, wslCmdLine);
 

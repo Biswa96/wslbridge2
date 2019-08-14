@@ -22,10 +22,20 @@
 
 #include <linux/vm_sockets.h>
 
-#define PORT_NUM 54321
+union IoSockets
+{
+    int sock[4];
+    struct
+    {
+        int inputSock;
+        int outputSock;
+        int errorSock;
+        int controlSock;
+    };
+};
 
-/* return created client socket to send */
-int Initialize(unsigned int initPort)
+/* Return created client socket to send */
+static int Initialize(unsigned int initPort)
 {
     int ret;
 
@@ -44,8 +54,8 @@ int Initialize(unsigned int initPort)
     return cSock;
 }
 
-/* return socket and random port number */
-int create_vmsock(unsigned int *randomPort)
+/* Return socket and random port number */
+static int create_vmsock(unsigned int *randomPort)
 {
     int ret;
 
@@ -73,38 +83,50 @@ int create_vmsock(unsigned int *randomPort)
     return sSock;
 }
 
-union IoSockets
+static void usage(const char *prog)
 {
-    int sock[4];
-    struct
-    {
-        int inputSock;
-        int outputSock;
-        int errorSock;
-        int controlSock;
-    };
-};
+    printf("backend for hvpty using AF_VSOCK sockets\n"
+           "Usage: %s [--] [options] [arguments]\n"
+           "\n"
+           "Options:\n"
+           "  -c, --cols N   set N columns for pty\n"
+           "  -h, --help     show this usage information\n"
+           "  -r, --rows N   set N rows for pty\n"
+           "  -p, --port N   set port N to initialize connections\n", prog);
+    exit(0);
+}
 
 int main(int argc, char *argv[])
 {
+    if (argc < 2)
+    {
+        printf("Try '%s --help' for more information.\n", argv[0]);
+        return 1;
+    }
+
     int ret;
     struct winsize winp;
-    unsigned int initPort = PORT_NUM;
+    unsigned int initPort = 0, randomPort = 0;
     int c = 0;
 
-    const struct option kOptionTable[] = {
-        { "col",  required_argument, 0, 'c' },
-        { "row",  required_argument, 0, 'r' },
-        { "port", required_argument, 0, 'p' },
-        { 0,      no_argument,       0,  0  },
+    const char shortopts[] = "+c:C:hr:p:";
+    const struct option longopts[] = {
+        { "cols",  required_argument, 0, 'c' },
+        { "help",  no_argument,       0, 'h' },
+        { "rows",  required_argument, 0, 'r' },
+        { "port",  required_argument, 0, 'p' },
+        { 0,       no_argument,       0,  0  },
     };
 
-    while ((c = getopt_long(argc, argv, "+c:r:p:", kOptionTable, NULL)) != -1)
+    while ((c = getopt_long(argc, argv, shortopts, longopts, NULL)) != -1)
     {
         switch (c)
         {
             case 'c':
                 winp.ws_col = atoi(optarg);
+                break;
+            case 'h':
+                usage(argv[0]);
                 break;
             case 'r':
                 winp.ws_row = atoi(optarg);
@@ -113,7 +135,9 @@ int main(int argc, char *argv[])
                 initPort = atoi(optarg);
                 break;
             default:
+                printf("Try '%s --help' for more information.\n", argv[0]);
                 exit(1);
+                break;
         }
     }
 
@@ -125,28 +149,22 @@ int main(int argc, char *argv[])
 
 #if defined (DEBUG) || defined (_DEBUG)
     printf("cols: %d row: %d port: %d\n",
-           winp.ws_col,winp.ws_row, initPort);
+           winp.ws_col, winp.ws_row, initPort);
 #endif
 
+    /* First connect to Windows side then send random port */
     int client_sock = Initialize(initPort);
-
-    unsigned int randomPort = 0;
     int server_sock = create_vmsock(&randomPort);
-
     ret = send(client_sock, &randomPort, sizeof randomPort, 0);
     assert(ret > 0);
 
+    /* Now act as a server and accept four I/O channels */
     union IoSockets ioSockets;
-
     for (int i = 0; i < 4; i++)
     {
         ioSockets.sock[i] = accept4(server_sock, NULL, NULL, SOCK_CLOEXEC);
         assert(ioSockets.sock[i] > 0);
     }
-
-    struct passwd *pwd = getpwuid(getuid());
-    if (pwd == NULL)
-        perror("getpwuid");
 
     int mfd;
     pid_t child = forkpty(&mfd, NULL, NULL, &winp);
@@ -162,7 +180,7 @@ int main(int argc, char *argv[])
         int sigfd = signalfd(-1, &set, 0);
         assert(sigfd > 0);
 
-        struct pollfd fds[6] = {
+        struct pollfd fds[] = {
                 { ioSockets.inputSock,    POLLIN, 0 },
                 { ioSockets.controlSock,  POLLIN, 0 },
                 { mfd,                    POLLIN, 0 },
@@ -171,11 +189,12 @@ int main(int argc, char *argv[])
 
         while(1)
         {
-            char data[100];
+            char data[1024];
 
             ret = poll(fds, (sizeof fds / sizeof fds[0]), -1);
             assert(ret > 0);
 
+            /* Receive input buffer and write it to master */
             if (fds[0].revents & POLLIN)
             {
                 ret = recv(ioSockets.inputSock, data, sizeof data, 0);
@@ -183,7 +202,7 @@ int main(int argc, char *argv[])
                 ret = write(mfd, &data, ret);
             }
 
-            /* resize window from receiving buffers */
+            /* Resize window when buffer received in control socket */
             if (fds[1].revents & POLLIN)
             {
                 unsigned short buff[2];
@@ -194,8 +213,14 @@ int main(int argc, char *argv[])
                 winp.ws_col = buff[1];
                 ret = ioctl(mfd, TIOCSWINSZ, &winp);
                 assert(ret == 0);
+
+                #if defined (DEBUG) || defined (_DEBUG)
+                printf("cols: %d row: %d port: %d\n",
+                       winp.ws_col, winp.ws_row);
+                #endif
             }
 
+            /* Receive buffers from master and send to output socket */
             if (fds[2].revents & POLLIN)
             {
                 ret = read(mfd, data, sizeof data);
@@ -209,7 +234,7 @@ int main(int argc, char *argv[])
                 shutdown(ioSockets.errorSock, SHUT_WR);
             }
 
-            /* if child process in slave side is terminated */
+            /* Break if child process in slave side is terminated */
             if (fds[3].revents & POLLIN)
             {
                 struct signalfd_siginfo sigbuff;
@@ -224,6 +249,11 @@ int main(int argc, char *argv[])
     }
     else if (child == 0) /* child or slave */
     {
+        struct passwd *pwd = getpwuid(getuid());
+        assert(pwd != NULL);
+        if (pwd->pw_shell == NULL)
+            pwd->pw_shell = "/bin/sh";
+
         char *args = NULL;
         ret = execvp(pwd->pw_shell, &args);
         assert(ret > 0);

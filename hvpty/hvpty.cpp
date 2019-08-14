@@ -24,8 +24,7 @@
 #include "../wslbridge/SocketIo.hpp"
 #include "../wslbridge/TerminalState.hpp"
 
-#define PORT_NUM 54321
-#define BUFF_SIZE 400
+#define DEFAULT_INIT_PORT 54321
 
 void GetVmId(GUID *LxInstanceID, wchar_t *DistroName);
 
@@ -48,14 +47,14 @@ static SOCKET Initialize(std::wstring command)
     addr.Family = AF_HYPERV;
     GetVmId(&addr.VmId, nullptr);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
-    addr.ServiceId.Data1 = PORT_NUM;
+    addr.ServiceId.Data1 = DEFAULT_INIT_PORT;
     ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
     assert(ret == 0);
 
     ret = listen(sServer, -1);
     assert(ret == 0);
 
-    PROCESS_INFORMATION pi ={};
+    PROCESS_INFORMATION pi = {};
     STARTUPINFOW si = {};
     si.cb = sizeof si;
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -75,7 +74,7 @@ static SOCKET Initialize(std::wstring command)
             fprintf(stderr, "backend start error: %d\n", GetLastError());
     }
     else
-        fprintf(stdout, "backend command is empty\n");
+        fatal("error: backend command string is empty\n");
 
     SOCKET sClient = accept(sServer, nullptr, nullptr);
     assert(sClient > 0);
@@ -141,7 +140,7 @@ static void resize_window(int signum)
 static void* send_buffer(void *param)
 {
     int ret;
-    char data[100];
+    char data[1024];
 
     struct pollfd fds = { STDIN_FILENO, POLLIN, 0 };
 
@@ -162,6 +161,22 @@ static void* send_buffer(void *param)
     return NULL;
 }
 
+static void usage(const char *prog)
+{
+    printf("backend for hvpty using AF_VSOCK sockets\n"
+           "Usage: %s [--] [options] [arguments]\n"
+           "\n"
+           "Options:\n"
+           "  -b, --backend BACKEND\n"
+           "                Overrides the default path of wslbridge2-backend to BACKEND\n"
+           "  -C, --directory WINDIR\n"
+           "                Changes the working directory to WINDIR first\n"
+           "  -h, --help    Show this usage information\n"
+           "  -d, --distribution Distribution Name\n"
+           "                Run the specified distribution\n", prog);
+    exit(0);
+}
+
 int main(int argc, char *argv[])
 {
     int ret;
@@ -170,18 +185,21 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const struct option kOptionTable[] = {
-        { "help",     no_argument,       0,     'h' },
-        { "distro",   required_argument, 0,     'd' },
-        { "backend",  required_argument, 0,     'b' },
-        { 0,          no_argument,       0,      0  },
+    const char shortopts[] = "+b:C:d:h";
+    const struct option longopts[] = {
+        { "backend",       required_argument, 0, 'b' },
+        { "directory",     required_argument, 0, 'C' },
+        { "distribution",  required_argument, 0, 'd' },
+        { "help",          no_argument,       0, 'h' },
+        { 0,               no_argument,       0,  0  },
     };
 
-    std::string customBackendPath;
+    std::string spawnCwd;
     std::string distroName;
+    std::string customBackendPath;
     int c = 0;
 
-    while ((c = getopt_long(argc, argv, "+b:d:h", kOptionTable, nullptr)) != -1)
+    while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
         switch (c)
         {
@@ -195,10 +213,20 @@ int main(int argc, char *argv[])
                     fatal("error: the --backend option requires a non-empty string argument\n");
                 break;
 
+            case 'C':
+                spawnCwd = optarg;
+                if (spawnCwd.empty())
+                    fatal("error: the -C option requires a non-empty string argument\n");
+                break;
+
             case 'd':
                 distroName = optarg;
                 if (distroName.empty())
                     fatal("error: the --distro argument '%s' is invalid\n", optarg);
+                break;
+
+            case 'h':
+                usage(argv[0]);
                 break;
 
             default:
@@ -209,8 +237,8 @@ int main(int argc, char *argv[])
     const std::wstring wslPath = findSystemProgram(L"wsl.exe");
     const auto backendPathInfo = normalizePath(
                     findBackendProgram(customBackendPath, L"hvpty-backend"));
-    const auto backendPathWin = backendPathInfo.first;
-    const auto fsname = backendPathInfo.second;
+    const std::wstring backendPathWin = backendPathInfo.first;
+    const std::wstring fsname = backendPathInfo.second;
     const struct TermSize initialSize = terminalSize();
 
     /* Prepare the backend command line. */
@@ -219,25 +247,38 @@ int main(int argc, char *argv[])
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
 
-    std::array<wchar_t, 1024> buffer;
-    ret = swprintf(buffer.data(), buffer.size(),
-                   L" -c%d -r%d -p%d",
-                   initialSize.cols,
-                   initialSize.rows,
-                   PORT_NUM);
+    {
+        std::array<wchar_t, 1024> buffer;
+        ret = swprintf(buffer.data(), buffer.size(),
+                       L" --cols %d --rows %d --port %d",
+                       initialSize.cols,
+                       initialSize.rows,
+                       DEFAULT_INIT_PORT);
 
-    assert(ret > 0);
-    wslCmdLine.append(buffer.data());
+        assert(ret > 0);
+        wslCmdLine.append(buffer.data());
+    }
 
     std::wstring cmdLine;
     cmdLine.append(L"\"");
     cmdLine.append(wslPath);
     cmdLine.append(L"\"");
+
     if (!distroName.empty())
     {
         cmdLine.append(L" -d ");
         cmdLine.append(mbsToWcs(distroName));
     }
+
+   /* this option is taken from registry
+    * HKCU\Directory\Background\shell\WSL\command
+    */
+    if (!spawnCwd.empty())
+    {
+        cmdLine.append(L" --cd ");
+        cmdLine.append(mbsToWcs(spawnCwd));
+    }
+
     cmdLine.append(L" bash -c ");
     appendWslArg(cmdLine, wslCmdLine);
 
@@ -268,7 +309,7 @@ int main(int argc, char *argv[])
     TerminalState termState;
     termState.enterRawMode();
 
-    char data[100];
+    char data[1024];
 
     while (1)
     {
