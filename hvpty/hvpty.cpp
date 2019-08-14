@@ -129,12 +129,29 @@ union IoSockets
 /* global variable */
 static union IoSockets g_ioSockets = { 0 };
 
-static void resize_window(int signum)
+static void* resize_window(void *set)
 {
+    int ret, signum;
     struct winsize winp;
-    ioctl(0, TIOCGWINSZ, &winp);
-    unsigned short buff[2] = { winp.ws_row, winp.ws_col };
-    send(g_ioSockets.controlSock, (char *)buff, sizeof buff, 0);
+
+    while (1)
+    {
+        /* wait for the window resize signal aka. SIGWINCH */
+        ret = sigwait((sigset_t *)set, &signum);
+        if (ret != 0 || signum != SIGWINCH)
+            break;
+
+        /* send terminal window size to control socket */
+        ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
+        unsigned short buff[2] = { winp.ws_row, winp.ws_col };
+        send(g_ioSockets.controlSock, (char *)buff, sizeof buff, 0);
+
+        #if defined (DEBUG) || defined (_DEBUG)
+        printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
+        #endif
+    }
+
+    return nullptr;
 }
 
 static void* send_buffer(void *param)
@@ -295,15 +312,18 @@ int main(int argc, char *argv[])
     for (int i = 0; i < 4; i++)
         g_ioSockets.sock[i] = create_hvsock(port);
 
-    struct sigaction act;
-    memset(&act, 0, sizeof act);
-    act.sa_flags = SA_RESTART;
-    act.sa_handler = resize_window;
-    ret = sigaction(SIGWINCH, &act, nullptr);
+    /* Create thread to send window size through control socket */
+    pthread_t tidResize;
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGWINCH);
+    pthread_sigmask(SIG_BLOCK, &set, nullptr);
+    ret = pthread_create(&tidResize, nullptr, resize_window, (void *)&set);
     assert(ret == 0);
 
-    pthread_t tid;
-    ret = pthread_create(&tid, nullptr, send_buffer, nullptr);
+    /* Create thread to send input buffer to input socket */
+    pthread_t tidInput;
+    ret = pthread_create(&tidInput, nullptr, send_buffer, nullptr);
     assert(ret == 0);
 
     TerminalState termState;
