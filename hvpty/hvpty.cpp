@@ -26,10 +26,13 @@
 
 #define DEFAULT_INIT_PORT 54321
 
-void GetVmId(GUID *LxInstanceID, wchar_t *DistroName);
+/* Enable this to show debug information */
+static const char IsDebugMode = 0;
+
+void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName);
 
 /* return accepted client socket to receive */
-static SOCKET Initialize(std::wstring command)
+static SOCKET Initialize(std::wstring &command, GUID *VmId)
 {
     int ret;
 
@@ -45,7 +48,7 @@ static SOCKET Initialize(std::wstring command)
     memset(&addr, 0, sizeof addr);
 
     addr.Family = AF_HYPERV;
-    GetVmId(&addr.VmId, nullptr);
+    memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
     addr.ServiceId.Data1 = DEFAULT_INIT_PORT;
     ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
@@ -59,11 +62,11 @@ static SOCKET Initialize(std::wstring command)
     si.cb = sizeof si;
     si.dwFlags = STARTF_USESHOWWINDOW;
 
-#if defined (DEBUG) || defined (_DEBUG)
-    si.wShowWindow = SW_SHOW;
-#else
-    si.wShowWindow = SW_HIDE;
-#endif
+    if (IsDebugMode)
+        si.wShowWindow = SW_SHOW;
+    else
+        si.wShowWindow = SW_HIDE;
+
 
     if (!command.empty())
     {
@@ -71,7 +74,7 @@ static SOCKET Initialize(std::wstring command)
                              nullptr, false, CREATE_NEW_CONSOLE,
                              nullptr, nullptr, &si, &pi);
         if (!ret)
-            fprintf(stderr, "backend start error: %d\n", GetLastError());
+            fatal("backend start error: %d\n", GetLastError());
     }
     else
         fatal("error: backend command string is empty\n");
@@ -84,7 +87,7 @@ static SOCKET Initialize(std::wstring command)
 }
 
 /* return socket and connect to random port number */
-static SOCKET create_hvsock(unsigned int port)
+static SOCKET create_hvsock(unsigned int randomPort, GUID *VmId)
 {
     int ret;
 
@@ -105,9 +108,9 @@ static SOCKET create_hvsock(unsigned int port)
     memset(&addr, 0, sizeof addr);
 
     addr.Family = AF_HYPERV;
-    GetVmId(&addr.VmId, nullptr);
+    memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
-    addr.ServiceId.Data1 = port;
+    addr.ServiceId.Data1 = randomPort;
     ret = connect(sock, (struct sockaddr *)&addr, sizeof addr);
     assert(ret == 0);
 
@@ -143,12 +146,10 @@ static void* resize_window(void *set)
 
         /* send terminal window size to control socket */
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-        unsigned short buff[2] = { winp.ws_row, winp.ws_col };
-        send(g_ioSockets.controlSock, (char *)buff, sizeof buff, 0);
+        send(g_ioSockets.controlSock, (char *)&winp, sizeof winp, 0);
 
-        #if defined (DEBUG) || defined (_DEBUG)
-        printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
-        #endif
+        if (IsDebugMode)
+            printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
     }
 
     return nullptr;
@@ -175,7 +176,7 @@ static void* send_buffer(void *param)
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void usage(const char *prog)
@@ -188,9 +189,11 @@ static void usage(const char *prog)
            "                Overrides the default path of wslbridge2-backend to BACKEND\n"
            "  -C, --directory WINDIR\n"
            "                Changes the working directory to WINDIR first\n"
-           "  -h, --help    Show this usage information\n"
            "  -d, --distribution Distribution Name\n"
-           "                Run the specified distribution\n", prog);
+           "                Run the specified distribution\n"
+           "  -h, --help    Show this usage information\n"
+           "  -u, --user    WSL User Name\n"
+           "                Run as the specified user\n", prog);
     exit(0);
 }
 
@@ -202,18 +205,20 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const char shortopts[] = "+b:C:d:h";
+    const char shortopts[] = "+b:C:d:hu:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "directory",     required_argument, 0, 'C' },
         { "distribution",  required_argument, 0, 'd' },
         { "help",          no_argument,       0, 'h' },
+        { "user",          required_argument, 0, 'u' },
         { 0,               no_argument,       0,  0  },
     };
 
     std::string spawnCwd;
     std::string distroName;
     std::string customBackendPath;
+    std::string userName;
     int c = 0;
 
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
@@ -239,11 +244,17 @@ int main(int argc, char *argv[])
             case 'd':
                 distroName = optarg;
                 if (distroName.empty())
-                    fatal("error: the --distro argument '%s' is invalid\n", optarg);
+                    fatal("error: the -d option argument '%s' is invalid\n", optarg);
                 break;
 
             case 'h':
                 usage(argv[0]);
+                break;
+
+            case 'u':
+                userName = optarg;
+                if (userName.empty())
+                    fatal("error: the -u option argument '%s' is invalid\n", optarg);
                 break;
 
             default:
@@ -287,30 +298,41 @@ int main(int argc, char *argv[])
         cmdLine.append(mbsToWcs(distroName));
     }
 
-   /* this option is taken from registry
-    * HKCU\Directory\Background\shell\WSL\command
-    */
+   /* Taken from HKCU\Directory\Background\shell\WSL\command */
     if (!spawnCwd.empty())
     {
         cmdLine.append(L" --cd ");
         cmdLine.append(mbsToWcs(spawnCwd));
     }
 
-    cmdLine.append(L" bash -c ");
+    if (!userName.empty())
+    {
+        cmdLine.append(L" --user ");
+        cmdLine.append(mbsToWcs(userName));
+    }
+
+    cmdLine.append(L" sh -c ");
     appendWslArg(cmdLine, wslCmdLine);
 
-#if defined (DEBUG) || defined (_DEBUG)
-    wprintf(L"%ls\n", cmdLine.c_str());
-#endif
+    if (IsDebugMode)
+        wprintf(L"%ls\n", cmdLine.c_str());
 
-    SOCKET sClient = Initialize(cmdLine);
+    /* Create server to receive random port number */
+    GUID VmId;
+    GetVmId(&VmId, mbsToWcs(distroName));
+    const SOCKET sClient = Initialize(cmdLine, &VmId);
 
-    unsigned int port = 0;
-    ret = recv(sClient, (char *)&port, sizeof port, 0);
+    unsigned int randomPort = 0;
+    ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
     assert(ret > 0);
+    closesocket(sClient);
 
+    /* Create four I/O sockets and connect with WSL server */
     for (int i = 0; i < 4; i++)
-        g_ioSockets.sock[i] = create_hvsock(port);
+    {
+        g_ioSockets.sock[i] = create_hvsock(randomPort, &VmId);
+        assert(g_ioSockets.sock[i] > 0);
+    }
 
     /* Create thread to send window size through control socket */
     pthread_t tidResize;
@@ -343,7 +365,6 @@ int main(int argc, char *argv[])
     /* cleanup */
     for (int i = 0; i < 4; i++)
         closesocket(g_ioSockets.sock[i]);
-    closesocket(sClient);
     WSACleanup();
     termState.exitCleanly(0);
 }

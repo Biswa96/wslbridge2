@@ -22,6 +22,9 @@
 
 #include <linux/vm_sockets.h>
 
+/* Enable this to show debug information */
+static const char IsDebugMode = 0;
+
 union IoSockets
 {
     int sock[4];
@@ -96,20 +99,23 @@ static void usage(const char *prog)
     exit(0);
 }
 
+static void try_help(const char *prog)
+{
+    fprintf(stderr, "Try '%s --help' for more information.\n", prog);
+    exit(1);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2)
-    {
-        printf("Try '%s --help' for more information.\n", argv[0]);
-        return 1;
-    }
+        try_help(argv[0]);
 
     int ret;
     struct winsize winp;
     unsigned int initPort = 0, randomPort = 0;
     int c = 0;
 
-    const char shortopts[] = "+c:C:hr:p:";
+    const char shortopts[] = "+c:hr:p:";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "help",  no_argument,       0, 'h' },
@@ -128,15 +134,14 @@ int main(int argc, char *argv[])
             case 'h':
                 usage(argv[0]);
                 break;
-            case 'r':
-                winp.ws_row = atoi(optarg);
-                break;
             case 'p':
                 initPort = atoi(optarg);
                 break;
+            case 'r':
+                winp.ws_row = atoi(optarg);
+                break;
             default:
-                printf("Try '%s --help' for more information.\n", argv[0]);
-                exit(1);
+                try_help(argv[0]);
                 break;
         }
     }
@@ -147,16 +152,16 @@ int main(int argc, char *argv[])
         assert(ret == 0);
     }
 
-#if defined (DEBUG) || defined (_DEBUG)
-    printf("cols: %d row: %d port: %d\n",
-           winp.ws_col, winp.ws_row, initPort);
-#endif
+    if (IsDebugMode)
+        printf("cols: %d row: %d port: %d\n",
+               winp.ws_col, winp.ws_row, initPort);
 
     /* First connect to Windows side then send random port */
-    int client_sock = Initialize(initPort);
-    int server_sock = create_vmsock(&randomPort);
+    const int client_sock = Initialize(initPort);
+    const int server_sock = create_vmsock(&randomPort);
     ret = send(client_sock, &randomPort, sizeof randomPort, 0);
     assert(ret > 0);
+    close(client_sock);
 
     /* Now act as a server and accept four I/O channels */
     union IoSockets ioSockets;
@@ -165,9 +170,13 @@ int main(int argc, char *argv[])
         ioSockets.sock[i] = accept4(server_sock, NULL, NULL, SOCK_CLOEXEC);
         assert(ioSockets.sock[i] > 0);
     }
+    close(server_sock);
 
     int mfd;
-    pid_t child = forkpty(&mfd, NULL, NULL, &winp);
+    char ptyname[16];
+    pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
+    if (IsDebugMode)
+        printf("pty name: %s\n", ptyname);
 
     if (child > 0) /* parent or master */
     {
@@ -187,10 +196,10 @@ int main(int argc, char *argv[])
                 { sigfd,                  POLLIN, 0 }
             };
 
+        char data[1024];
+
         while(1)
         {
-            char data[1024];
-
             ret = poll(fds, (sizeof fds / sizeof fds[0]), -1);
             assert(ret > 0);
 
@@ -205,19 +214,17 @@ int main(int argc, char *argv[])
             /* Resize window when buffer received in control socket */
             if (fds[1].revents & POLLIN)
             {
-                unsigned short buff[2];
-                ret = recv(ioSockets.controlSock, buff, sizeof buff, 0);
+                ret = recv(ioSockets.controlSock, &winp, sizeof winp, 0);
                 assert(ret > 0);
 
-                winp.ws_row = buff[0];
-                winp.ws_col = buff[1];
+                /* Remove "unused" pixel values ioctl_tty(2) */
+                winp.ws_xpixel = 0;
+                winp.ws_ypixel = 0;
                 ret = ioctl(mfd, TIOCSWINSZ, &winp);
                 assert(ret == 0);
 
-                #if defined (DEBUG) || defined (_DEBUG)
-                printf("cols: %d row: %d port: %d\n",
-                       winp.ws_col, winp.ws_row);
-                #endif
+                if (IsDebugMode)
+                    printf("cols: %d row: %d\n", winp.ws_col, winp.ws_row);
             }
 
             /* Receive buffers from master and send to output socket */
@@ -230,8 +237,8 @@ int main(int argc, char *argv[])
 
             if (fds[2].revents & (POLLERR | POLLHUP))
             {
-                shutdown(ioSockets.outputSock, SHUT_WR);
-                shutdown(ioSockets.errorSock, SHUT_WR);
+                for (int i = 0; i < 4; i++)
+                    shutdown(ioSockets.sock[i], SHUT_RDWR);
             }
 
             /* Break if child process in slave side is terminated */
@@ -264,6 +271,4 @@ int main(int argc, char *argv[])
     /* cleanup */
     for (int i = 0; i < 4; i++)
         close(ioSockets.sock[i]);
-    close(server_sock);
-    close(client_sock);
 }

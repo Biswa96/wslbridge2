@@ -7,6 +7,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <assert.h>
+#include <string>
 
 static const GUID CLSID_LxssUserSession = {
     0x4F476546,
@@ -91,7 +92,7 @@ extern "C"
     HANDLE GetConsoleHandle(void);
 }
 
-void GetVmId(GUID *LxInstanceID, PWSTR DistroName)
+void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName)
 {
     int bRes;
     HRESULT hRes;
@@ -119,10 +120,10 @@ void GetVmId(GUID *LxInstanceID, PWSTR DistroName)
     assert(hRes == 0);
 
     GUID DistroId;
-    if (DistroName == nullptr)
+    if (DistroName.empty())
         hRes = wslSession->GetDefaultDistribution(&DistroId);
     else
-        hRes = wslSession->GetDistributionId(DistroName, 0, &DistroId);
+        hRes = wslSession->GetDistributionId(DistroName.c_str(), 0, &DistroId);
     assert(hRes == 0);
 
     if (hRes == 0)
