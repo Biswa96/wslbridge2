@@ -86,12 +86,6 @@ public:
     virtual HRESULT Shutdown(void) = 0;
 };
 
-/* from assembly source file */
-extern "C"
-{
-    HANDLE GetConsoleHandle(void);
-}
-
 void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName)
 {
     int bRes;
@@ -131,14 +125,26 @@ void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName)
        /* StdHandles member must be zero */
         LXSS_STD_HANDLES StdHandles = { 0 };
         GUID InitiatedDistroID;
-        HANDLE LxProcessHandle, ServerHandle;
+        HANDLE ConsoleHandle, LxProcessHandle, ServerHandle;
         SOCKET SockIn, SockOut, SockErr, ServerSocket;
+
+       /*
+        * Alternative of NtCurrentTeb with __readgsqword
+        * TEB->PEB->ProcessParameters->ConsoleHandle
+        */
+        __asm__ (
+        "movq %%gs:0x30, %%rax \n\t"
+        "movq 0x60(%%rax), %%rax \n\t"
+        "movq 0x20(%%rax), %%rax \n\t"
+        "movq 0x10(%%rax), %%rax \n\t"
+        "movq %%rax, %0"
+        : "=r" (ConsoleHandle));
 
         hRes = wslSession->CreateLxProcess(
             &DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
             nullptr, 0, nullptr, 0, 0,
-            HandleToULong(GetConsoleHandle()),
+            HandleToULong(ConsoleHandle),
             &StdHandles,
             &InitiatedDistroID,
             LxInstanceID,
