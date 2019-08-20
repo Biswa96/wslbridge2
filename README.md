@@ -1,43 +1,70 @@
+<!--
+ * This file is part of wslbridge2 project
+ * Licensed under the GNU General Public License version 3
+ * Copyright (C) 2019 Biswapriyo Nath
+-->
+
 # wslbridge2
 
 [![Licence](https://img.shields.io/github/license/Biswa96/wslbridge2.svg)][1]
 [![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg)][2]
 [![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg)]()
 
-Explore various ways to connect WSL with Windows terminal emulators (in progress).
+Explore various ways to connect WSL with Windows terminal emulators.
+
+## How to build
+
+Clone this git repository. Run `make` in cygwin and WSL to make all binaries.
+To build individual programs, go to that corresponding folder and run `make`.
+All binaries will be saved in `bin` folder.
 
 
 ## How to use
 
-### hvsocket: samples using Hyper-V sockets
+### Requirements:
+
+* A POSIX-compatible environment - cygwin or msys2
+* A terminal emulator - mintty or ConEmu
+
+### hvpty: connect WSL2 with AF_HYPERV sockets
+
+Place `hvpty.exe` and `hvpty-backend` in same Windows folder. Run `hvpty.exe`.
+
+### hvsocket: Sample C code using Hyper-V sockets
 
 Pick up any one of 1. `win_client` & `wsl_server` 2. `win_server` & `wsl_client`.
-Compile the Windows part in cygwin or msys2 or msvc and the WSL part in WSL.
-Run the server part first and it will wait for the client connection.
+Run `wsl.exe` first. Paste the VM ID from the last argument of `wslhost.exe`
+process's command line. Compile the `win_` part in cygwin or msys2 and
+the `wsl_` part in WSL. Run the server part first. It will wait for the client.
 
 ### rawpty: use pseudo console with terminal emulators
 
-`cd` into rawpty folder and run `make` command to compile. The source file
-depends on old wslbridge's frontend and common folder, so do not move or
-delete those. After compiling, run `rawpty.exe wsl.exe` command in mintty.
-It's "raw" because it creates conhost process instead of other Windows program.
+Run `rawpty.exe wsl.exe` command. This can also be any Windows console program.
+See the sample [screenshot](images/Headless_Mode.PNG) without headless mode.
 
-<img align=right src=images\Headless_Mode.PNG>
+### wslbridge2: connect WSL1 with AF_INET sockets
+
+Place `wslbridge2.exe` and `wslbridge2-backend` in same Windows folder.
+Run `wslbridge2.exe`.
+
+
+## Caveats
+
+* The graphics may lag sometimes due to multiple layers of data transitions
+between Windows and WSL side programs.
+
+* There is no documented way to get VM ID from WSL2 Linux VM. See this
+[issue](https://github.com/microsoft/WSL/issues/4131). Hence `hvpty` may change
+according to future Windows 10 releases.
+
 
 ## Further Readings
-
-:fire: Warning! Everything is not documented.
-
-### hvsocket:
 
   - [Make your own integration services][3]
   - [Linux kernel: af_vsock.c][4]
   - [Linux kernel: vm_sockets.h][5]
   - [VMWare: VMCI Socket Programming Guide][6]
   - [man7: vsock(7)][7]
-
-### rawpty:
-
   - [wslbridge](https://github.com/rprichard/wslbridge)
   - [win32-console-docs](https://github.com/rprichard/win32-console-docs)
   - [XConPty](https://github.com/Biswa96/XConPty)
@@ -47,7 +74,8 @@ It's "raw" because it creates conhost process instead of other Windows program.
 wslbridge2 is licensed under the GNU General Public License v3.
 A full copy of the license is provided in [LICENSE](LICENSE).
 
-    Copyright (c) 2019 Biswapriyo Nath
+    wslbridge2 -- Explore various ways to connect WSL with Windows terminal emulators.
+    Copyright (C) 2019 Biswapriyo Nath
     
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
