@@ -25,7 +25,12 @@
 #include "../wslbridge/TerminalState.hpp"
 
 #define DEFAULT_INIT_PORT 54321
-
+#define DYNAMIC_PORT_LOW 49152
+#define DYNAMIC_PORT_HIGH 65535
+#define BIND_MAX_RETRIES 10
+int random_port(){
+  return rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW;
+}
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
@@ -50,9 +55,24 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
     addr.Family = AF_HYPERV;
     memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
-    addr.ServiceId.Data1 = DEFAULT_INIT_PORT;
-    ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
-    assert(ret == 0);
+
+    //try to bind to a dynamic port (while normal sockets can directly do so, but I cannot find a alternative for hvsocket)
+    int nretries = 0, port;
+    while (nretries < BIND_MAX_RETRIES) {
+      port = random_port();
+      addr.ServiceId.Data1 = port;
+      ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
+      if (ret == 0) break;
+      nretries ++;
+    }
+
+    //fill-in the placeholder of port number
+    int portpos = command.find(L"$PORT");
+    assert(portpos >= 0);
+    std::array<wchar_t, 1024> buffer;
+    ret = swprintf(buffer.data(), buffer.size(), L"%d", port);
+    assert(ret > 0);
+    command.replace(portpos, 5, buffer.data());
 
     ret = listen(sServer, -1);
     assert(ret == 0);
@@ -199,6 +219,7 @@ static void usage(const char *prog)
 
 int main(int argc, char *argv[])
 {
+    srand(time(NULL));
     int ret;
 
     struct WSAData wdata;
@@ -278,10 +299,9 @@ int main(int argc, char *argv[])
     {
         std::array<wchar_t, 1024> buffer;
         ret = swprintf(buffer.data(), buffer.size(),
-                       L" --cols %d --rows %d --port %d",
+                       L" --cols %d --rows %d --port $PORT",
                        initialSize.cols,
-                       initialSize.rows,
-                       DEFAULT_INIT_PORT);
+                       initialSize.rows);
 
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
