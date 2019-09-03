@@ -219,6 +219,7 @@ static void usage(const char *prog) {
     printf("  -l            Start a login shell.\n");
     printf("  --no-login    Do not start a login shell.\n");
     printf("  -T            Do not use a pty.\n");
+    printf("  -H, --home    Start WSL at linux home directory.\n");
     printf("  -t            Use a pty (as long as stdin is a tty).\n");
     printf("  -t -t         Force a pty (even if stdin is not a tty).\n");
     exit(0);
@@ -482,6 +483,8 @@ int main(int argc, char *argv[])
     std::string spawnCwd;
     std::string distroName;
     std::string customBackendPath;
+    std::string wsl_dir;
+    bool has_wsldir = false;
     enum class TtyRequest { Auto, Yes, No, Force } ttyRequest = TtyRequest::Auto;
     enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
 
@@ -491,17 +494,18 @@ int main(int argc, char *argv[])
         loginMode = LoginMode::Yes;
     }
 
-    const char shortopts[] = "+b:C:d:e:hlLtT";
+    const char shortopts[] = "+b:C:D:d:e:hlLtT";
     const struct option longopts[] = {
         { "backend",        required_argument,  nullptr,     'b' },
         { "directory",      required_argument,  nullptr,     'C' },
+	{ "wsl-dir",        required_argument,  nullptr,     'D' },
         { "distribution",   required_argument,  nullptr,     'd' },
         { "help",           no_argument,        nullptr,     'h' },
         { "debug-fork",     no_argument,       &debugFork,    1  },
         { "no-login",       no_argument,        nullptr,     'L' },
         { nullptr,          no_argument,        nullptr,      0  },
     };
-
+    //int start_at_home = false;
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
         switch (c)
@@ -528,6 +532,13 @@ int main(int argc, char *argv[])
                     fatal("error: the -C option requires a non-empty string argument\n");
                 }
                 break;
+            case 'P':
+	        has_wsldir = true;
+		wsl_dir = optarg;
+		if (wsl_dir.empty()) {
+                    fatal("error: the -P option requires a non-empty string argument\n");
+                }
+	        break;
             case 'h':
                 usage(argv[0]);
                 break;
@@ -612,6 +623,9 @@ int main(int argc, char *argv[])
 
     /* Prepare the backend command line. */
     std::wstring wslCmdLine;
+    // if (start_at_home) {
+    //     wslCmdLine.append(L"~ ");
+    // }
     wslCmdLine.append(L"\"$(wslpath -u");
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
@@ -620,6 +634,10 @@ int main(int argc, char *argv[])
         appendWslArg(wslCmdLine, L"--debug-fork");
     }
 
+    if (has_wsldir) {
+        appendWslArg(wslCmdLine, L"-P");
+        appendWslArg(wslCmdLine, mbsToWcs(wsl_dir));
+    }
     std::array<wchar_t, 1024> buffer;
     int iRet = swprintf(buffer.data(), buffer.size(),
                         L" -3%d -0%d -1%d -w%d -t%d",
@@ -690,7 +708,7 @@ int main(int argc, char *argv[])
     sui.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
     sui.StartupInfo.hStdOutput = outputPipe.wh;
     sui.StartupInfo.hStdError = errorPipe.wh;
-
+    wprintf(L"%ls\n", &cmdLine[0]);
     PROCESS_INFORMATION pi = {};
     BOOL success = CreateProcessW(wslPath.c_str(), &cmdLine[0], nullptr, nullptr,
         true,

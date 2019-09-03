@@ -525,9 +525,9 @@ int main(int argc, char *argv[]) {
         { "debug-fork",     false, nullptr,     0 },
         { nullptr,          false, nullptr,     0 },
     };
-
+    char *work_dir = NULL;
     int ch = 0;
-    while ((ch = getopt_long(argc, argv, "+3:0:1:2:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1) {
+    while ((ch = getopt_long(argc, argv, "+3:0:1:2:c:r:w:t:e:C:lP:", kOptionTable, nullptr)) != -1) {
         switch (ch) {
             case 0:
                 // This is returned for the two long options.  getopt_long
@@ -543,6 +543,7 @@ int main(int argc, char *argv[]) {
             case 't': windowThreshold = atoi(optarg); break;
             case 'e': childParams.env.push_back(strdup(optarg)); break;
             case 'C': childParams.cwd = optarg; break;
+            case 'P': work_dir = optarg; break;
             case 'l': loginMode = true; break;
             default:
                 exit(1);

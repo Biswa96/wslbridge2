@@ -95,6 +95,7 @@ static void usage(const char *prog)
            "  -c, --cols N   set N columns for pty\n"
            "  -h, --help     show this usage information\n"
            "  -r, --rows N   set N rows for pty\n"
+	   "  -P, --path dir start in certain path\n"
            "  -p, --port N   set port N to initialize connections\n", prog);
     exit(0);
 }
@@ -115,15 +116,16 @@ int main(int argc, char *argv[])
     unsigned int initPort = 0, randomPort = 0;
     int c = 0;
 
-    const char shortopts[] = "+c:hr:p:";
+    const char shortopts[] = "+c:hr:P:p:";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "help",  no_argument,       0, 'h' },
         { "rows",  required_argument, 0, 'r' },
+	{ "path",  required_argument, 0, 'P' },
         { "port",  required_argument, 0, 'p' },
         { 0,       no_argument,       0,  0  },
     };
-
+    char *work_path = NULL;
     while ((c = getopt_long(argc, argv, shortopts, longopts, NULL)) != -1)
     {
         switch (c)
@@ -140,12 +142,18 @@ int main(int argc, char *argv[])
             case 'r':
                 winp.ws_row = atoi(optarg);
                 break;
-            default:
+            case 'P':
+                work_path = optarg;
+                break;
+	    default:
                 try_help(argv[0]);
                 break;
         }
     }
 
+    if (work_path) {
+        chdir(work_path);
+    }
     if (winp.ws_col == 0 || winp.ws_row == 0)
     {
         ret = ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);

@@ -73,7 +73,7 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
     ret = swprintf(buffer.data(), buffer.size(), L"%d", port);
     assert(ret > 0);
     command.replace(portpos, 5, buffer.data());
-
+    wprintf(L"%ls\n", &command[0]);
     ret = listen(sServer, -1);
     assert(ret == 0);
 
@@ -209,6 +209,8 @@ static void usage(const char *prog)
            "                Overrides the default path of wslbridge2-backend to BACKEND\n"
            "  -C, --directory WINDIR\n"
            "                Changes the working directory to WINDIR first\n"
+	   "  -D, --wsl-dir WSLDIR\n"
+           "                Changes the working directory to WSLDIR in WSL\n"
            "  -d, --distribution Distribution Name\n"
            "                Run the specified distribution\n"
            "  -h, --help    Show this usage information\n"
@@ -226,12 +228,13 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const char shortopts[] = "+b:C:d:hu:";
+    const char shortopts[] = "+b:C:D:d:hu:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "directory",     required_argument, 0, 'C' },
         { "distribution",  required_argument, 0, 'd' },
         { "help",          no_argument,       0, 'h' },
+	{ "wsl-dir",       required_argument, 0, 'D' },
         { "user",          required_argument, 0, 'u' },
         { 0,               no_argument,       0,  0  },
     };
@@ -240,6 +243,8 @@ int main(int argc, char *argv[])
     std::string distroName;
     std::string customBackendPath;
     std::string userName;
+    bool has_wsldir = false;
+    std::string wsldir;
     int c = 0;
 
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
@@ -261,6 +266,12 @@ int main(int argc, char *argv[])
                 if (spawnCwd.empty())
                     fatal("error: the -C option requires a non-empty string argument\n");
                 break;
+            case 'D':
+                wsldir = optarg;
+		has_wsldir = true;
+                if (wsldir.empty())
+                    fatal("error: the -D option requires a non-empty string argument\n");
+                break;
 
             case 'd':
                 distroName = optarg;
@@ -271,7 +282,6 @@ int main(int argc, char *argv[])
             case 'h':
                 usage(argv[0]);
                 break;
-
             case 'u':
                 userName = optarg;
                 if (userName.empty())
@@ -302,9 +312,12 @@ int main(int argc, char *argv[])
                        L" --cols %d --rows %d --port $PORT",
                        initialSize.cols,
                        initialSize.rows);
-
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
+	if (has_wsldir) {
+	  wslCmdLine.append(L" --path ");
+	  wslCmdLine.append(mbsToWcs(wsldir));
+	}
     }
 
     std::wstring cmdLine;
@@ -321,8 +334,8 @@ int main(int argc, char *argv[])
    /* Taken from HKCU\Directory\Background\shell\WSL\command */
     if (!spawnCwd.empty())
     {
-        cmdLine.append(L" --cd ");
-        cmdLine.append(mbsToWcs(spawnCwd));
+      cmdLine.append(L" --cd ");
+      cmdLine.append(mbsToWcs(spawnCwd));
     }
 
     if (!userName.empty())
