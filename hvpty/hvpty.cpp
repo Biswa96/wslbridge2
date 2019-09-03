@@ -24,13 +24,16 @@
 #include "../wslbridge/SocketIo.hpp"
 #include "../wslbridge/TerminalState.hpp"
 
-#define DEFAULT_INIT_PORT 54321
+/* The range 49152–65535 contains dynamic ports */
 #define DYNAMIC_PORT_LOW 49152
 #define DYNAMIC_PORT_HIGH 65535
 #define BIND_MAX_RETRIES 10
-int random_port(){
-  return rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW;
+
+static int random_port(void)
+{
+    return rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW;
 }
+
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
@@ -56,23 +59,30 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
     memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
 
-    //try to bind to a dynamic port (while normal sockets can directly do so, but I cannot find a alternative for hvsocket)
-    int nretries = 0, port;
-    while (nretries < BIND_MAX_RETRIES) {
-      port = random_port();
-      addr.ServiceId.Data1 = port;
-      ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
-      if (ret == 0) break;
-      nretries ++;
+    /* Try to bind to a dynamic port */
+    int nretries = 0;
+    int initPort;
+
+    while (nretries < BIND_MAX_RETRIES)
+    {
+        initPort = random_port();
+        addr.ServiceId.Data1 = initPort;
+        ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
+        if (ret == 0)
+            break;
+
+        nretries ++;
     }
 
-    //fill-in the placeholder of port number
-    int portpos = command.find(L"$PORT");
-    assert(portpos >= 0);
-    std::array<wchar_t, 1024> buffer;
-    ret = swprintf(buffer.data(), buffer.size(), L"%d", port);
-    assert(ret > 0);
-    command.replace(portpos, 5, buffer.data());
+    /* Fill-in the placeholder of port number */
+    {
+        int portpos = command.find(L"$PORT");
+        assert(portpos >= 0);
+        std::array<wchar_t, 1024> buffer;
+        ret = swprintf(buffer.data(), buffer.size(), L"%d", initPort);
+        assert(ret > 0);
+        command.replace(portpos, 5, buffer.data());
+    }
 
     ret = listen(sServer, -1);
     assert(ret == 0);
@@ -217,6 +227,11 @@ static void usage(const char *prog)
     exit(0);
 }
 
+static void invalid_arg(const char *arg)
+{
+    fatal("error: the %s option requires a non-empty string argument\n", arg);
+}
+
 int main(int argc, char *argv[])
 {
     srand(time(NULL));
@@ -253,19 +268,19 @@ int main(int argc, char *argv[])
             case 'b':
                 customBackendPath = optarg;
                 if (customBackendPath.empty())
-                    fatal("error: the --backend option requires a non-empty string argument\n");
+                    invalid_arg("backend");
                 break;
 
             case 'C':
                 spawnCwd = optarg;
                 if (spawnCwd.empty())
-                    fatal("error: the -C option requires a non-empty string argument\n");
+                    invalid_arg("directory");
                 break;
 
             case 'd':
                 distroName = optarg;
                 if (distroName.empty())
-                    fatal("error: the -d option argument '%s' is invalid\n", optarg);
+                    invalid_arg("distribution");
                 break;
 
             case 'h':
@@ -275,7 +290,7 @@ int main(int argc, char *argv[])
             case 'u':
                 userName = optarg;
                 if (userName.empty())
-                    fatal("error: the -u option argument '%s' is invalid\n", optarg);
+                    invalid_arg("user");
                 break;
 
             default:
@@ -290,7 +305,7 @@ int main(int argc, char *argv[])
     const std::wstring fsname = backendPathInfo.second;
     const struct TermSize initialSize = terminalSize();
 
-    /* Prepare the backend command line. */
+    /* Prepare the backend command line */
     std::wstring wslCmdLine;
     wslCmdLine.append(L"\"$(wslpath -u");
     appendWslArg(wslCmdLine, backendPathWin);
@@ -307,6 +322,7 @@ int main(int argc, char *argv[])
         wslCmdLine.append(buffer.data());
     }
 
+    /* Append wsl.exe options and its arguments */
     std::wstring cmdLine;
     cmdLine.append(L"\"");
     cmdLine.append(wslPath);
@@ -331,7 +347,7 @@ int main(int argc, char *argv[])
         cmdLine.append(mbsToWcs(userName));
     }
 
-    cmdLine.append(L" sh -c ");
+    cmdLine.append(L" /bin/sh -c ");
     appendWslArg(cmdLine, wslCmdLine);
 
     if (IsDebugMode)
