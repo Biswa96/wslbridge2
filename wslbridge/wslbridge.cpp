@@ -532,11 +532,11 @@ int main(int argc, char *argv[])
                     fatal("error: the -C option requires a non-empty string argument\n");
                 }
                 break;
-            case 'P':
+            case 'D':
 	        has_wsldir = true;
 		wsl_dir = optarg;
 		if (wsl_dir.empty()) {
-                    fatal("error: the -P option requires a non-empty string argument\n");
+                    fatal("error: the -D option requires a non-empty string argument\n");
                 }
 	        break;
             case 'h':
@@ -635,7 +635,7 @@ int main(int argc, char *argv[])
     }
 
     if (has_wsldir) {
-        appendWslArg(wslCmdLine, L"-P");
+        appendWslArg(wslCmdLine, L"-C");
         appendWslArg(wslCmdLine, mbsToWcs(wsl_dir));
     }
     std::array<wchar_t, 1024> buffer;
