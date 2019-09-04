@@ -73,7 +73,7 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
     ret = swprintf(buffer.data(), buffer.size(), L"%d", port);
     assert(ret > 0);
     command.replace(portpos, 5, buffer.data());
-    wprintf(L"%ls\n", &command[0]);
+
     ret = listen(sServer, -1);
     assert(ret == 0);
 

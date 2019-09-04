@@ -211,6 +211,9 @@ static void usage(const char *prog) {
     printf("                Overrides the default path of wslbridge2-backend to BACKEND\n");
     printf("  -C, --directory WINDIR\n");
     printf("                Changes the working directory to WINDIR first\n");
+    printf("  -D, --wsl-dir WINDIR\n");
+    printf("                Changes the working directory to WSL-DIR in backend\n");
+
     printf("  -d, --distribution Distribution Name\n");
     printf("                Run the specified distribution.\n");
     printf("  -e VAR        Copies VAR into the WSL environment.\n");
@@ -219,7 +222,6 @@ static void usage(const char *prog) {
     printf("  -l            Start a login shell.\n");
     printf("  --no-login    Do not start a login shell.\n");
     printf("  -T            Do not use a pty.\n");
-    printf("  -H, --home    Start WSL at linux home directory.\n");
     printf("  -t            Use a pty (as long as stdin is a tty).\n");
     printf("  -t -t         Force a pty (even if stdin is not a tty).\n");
     exit(0);
@@ -505,7 +507,7 @@ int main(int argc, char *argv[])
         { "no-login",       no_argument,        nullptr,     'L' },
         { nullptr,          no_argument,        nullptr,      0  },
     };
-    //int start_at_home = false;
+
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
         switch (c)
@@ -623,9 +625,6 @@ int main(int argc, char *argv[])
 
     /* Prepare the backend command line. */
     std::wstring wslCmdLine;
-    // if (start_at_home) {
-    //     wslCmdLine.append(L"~ ");
-    // }
     wslCmdLine.append(L"\"$(wslpath -u");
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
@@ -708,7 +707,7 @@ int main(int argc, char *argv[])
     sui.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
     sui.StartupInfo.hStdOutput = outputPipe.wh;
     sui.StartupInfo.hStdError = errorPipe.wh;
-    wprintf(L"%ls\n", &cmdLine[0]);
+
     PROCESS_INFORMATION pi = {};
     BOOL success = CreateProcessW(wslPath.c_str(), &cmdLine[0], nullptr, nullptr,
         true,
