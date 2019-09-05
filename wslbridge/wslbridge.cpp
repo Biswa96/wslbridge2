@@ -211,12 +211,12 @@ static void usage(const char *prog)
     "Options:\n"
     "  -b, --backend BACKEND\n"
     "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-    "  -C, --directory WINDIR\n"
+    "  --windir      WINDIR\n"
     "                Changes the working directory to WINDIR first\n"
+    "  --wsldir      WSLDIR\n"
+    "                Changes the working directory to WSLDIR in WSL\n"
     "  -d, --distribution Distribution Name\n"
     "                Run the specified distribution.\n"
-    "  -D, --wsl-dir WINDIR\n"
-    "                Changes the working directory to WSL-DIR in backend\n"
     "  -e VAR        Copies VAR into the WSL environment.\n"
     "  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n"
     "  -h, --help    Show this usage information\n"
@@ -480,6 +480,11 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
+enum long_opts {
+    OPT_WSL_DIR = 0x80,
+    OPT_WIN_DIR = 0x81		
+};
+
 int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "");
@@ -516,6 +521,8 @@ int main(int argc, char *argv[])
         { "debug-fork",     no_argument,       &debugFork,    1  },
         { "no-login",       no_argument,        nullptr,     'L' },
         { "user",           required_argument,  nullptr,     'u' },
+	{ "wsldir",         required_argument,  nullptr, OPT_WSL_DIR },
+	{ "windir",         required_argument,  nullptr, OPT_WIN_DIR },	
         { nullptr,          no_argument,        nullptr,      0  },
     };
 
@@ -539,16 +546,17 @@ int main(int argc, char *argv[])
                     env.set(varname);
                 break;
             }
+            case OPT_WIN_DIR:
             case 'C':
                 spawnCwd = optarg;
                 if (spawnCwd.empty())
-                    invalid_arg("directory");
+                    invalid_arg("windir");
                 break;
-            case 'D':
+            case OPT_WSL_DIR:
 	        has_wsldir = true;
 		wsl_dir = optarg;
 		if (wsl_dir.empty()) {
-                    fatal("error: the -D option requires a non-empty string argument\n");
+                    invalid_arg("wsldir");
                 }
 	        break;
             case 'h':

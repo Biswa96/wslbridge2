@@ -217,9 +217,9 @@ static void usage(const char *prog)
            "Options:\n"
            "  -b, --backend BACKEND\n"
            "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-           "  -C, --directory WINDIR\n"
+           "  --windir      WINDIR\n"
            "                Changes the working directory to WINDIR first\n"
-	   "  -D, --wsl-dir WSLDIR\n"
+	   "  --wsldir      WSLDIR\n"
            "                Changes the working directory to WSLDIR in WSL\n"
            "  -d, --distribution Distribution Name\n"
            "                Run the specified distribution\n"
@@ -234,6 +234,10 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
+enum long_opts {
+    OPT_WSL_DIR = 0x80,
+    OPT_WIN_DIR = 0x81		
+};
 int main(int argc, char *argv[])
 {
     srand(time(NULL));
@@ -249,8 +253,9 @@ int main(int argc, char *argv[])
         { "directory",     required_argument, 0, 'C' },
         { "distribution",  required_argument, 0, 'd' },
         { "help",          no_argument,       0, 'h' },
-	{ "wsl-dir",       required_argument, 0, 'D' },
         { "user",          required_argument, 0, 'u' },
+	{ "wsldir",        required_argument, 0, OPT_WSL_DIR },
+	{ "windir",        required_argument, 0, OPT_WIN_DIR },
         { 0,               no_argument,       0,  0  },
     };
 
@@ -275,18 +280,17 @@ int main(int argc, char *argv[])
                 if (customBackendPath.empty())
                     invalid_arg("backend");
                 break;
-
+            case OPT_WIN_DIR:
             case 'C':
                 spawnCwd = optarg;
                 if (spawnCwd.empty())
-                    invalid_arg("directory");
+                    invalid_arg("windir");
                 break;
-		
-            case 'D':
+            case OPT_WSL_DIR:
                 wsldir = optarg;
 		has_wsldir = true;
                 if (wsldir.empty())
-                    invalid_arg("wsl-dir");
+                    invalid_arg("wsldir");
                 break;
 
             case 'd':
