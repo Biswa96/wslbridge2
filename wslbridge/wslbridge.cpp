@@ -511,11 +511,10 @@ int main(int argc, char *argv[])
         loginMode = LoginMode::Yes;
     }
 
-    const char shortopts[] = "+b:C:d:D:e:hlLtTu:";
+    const char shortopts[] = "+b:C:d:e:hlLtTu:";
     const struct option longopts[] = {
         { "backend",        required_argument,  nullptr,     'b' },
         { "directory",      required_argument,  nullptr,     'C' },
-	{ "wsl-dir",        required_argument,  nullptr,     'D' },
         { "distribution",   required_argument,  nullptr,     'd' },
         { "help",           no_argument,        nullptr,     'h' },
         { "debug-fork",     no_argument,       &debugFork,    1  },

@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const char shortopts[] = "+b:C:D:d:hu:";
+    const char shortopts[] = "+b:C:d:hu:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "directory",     required_argument, 0, 'C' },
