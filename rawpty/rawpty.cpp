@@ -5,9 +5,10 @@
  */
 
 #include <windows.h>
-
+#include <assert.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -42,6 +43,7 @@ public:
     void CreateConHost(std::string program, bool usePty, bool followCur);
 
 private:
+    int mRes;
     void *mhStdIn = nullptr;
     void *mhStdOut = nullptr;
 };
@@ -52,17 +54,19 @@ RawPty::RawPty()
     mhStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     void *hProc = GetCurrentProcess();
 
-    DuplicateHandle(hProc, mhStdIn, hProc, &mhStdIn,
-                    0, TRUE, DUPLICATE_SAME_ACCESS);
+    mRes = DuplicateHandle(hProc, mhStdIn, hProc, &mhStdIn,
+                           0, TRUE, DUPLICATE_SAME_ACCESS);
+    assert(mRes != 0);
 
-    DuplicateHandle(hProc, mhStdOut, hProc, &mhStdOut,
-                    0, TRUE, DUPLICATE_SAME_ACCESS);
+    mRes = DuplicateHandle(hProc, mhStdOut, hProc, &mhStdOut,
+                           0, TRUE, DUPLICATE_SAME_ACCESS);
+    assert(mRes != 0);
 }
 
 RawPty::~RawPty()
 {
-    if (mhStdIn != nullptr) CloseHandle(mhStdIn);
-    if (mhStdOut != nullptr) CloseHandle(mhStdOut);
+    CloseHandle(mhStdIn);
+    CloseHandle(mhStdOut);
 }
 
 /* global variable */
@@ -117,25 +121,32 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     SECURITY_ATTRIBUTES pipeAttr = {};
     pipeAttr.nLength = sizeof pipeAttr;
     pipeAttr.bInheritHandle = false;
-    CreatePipe(&hPipe[0], &hPipe[1], &pipeAttr, 0);
-    SetHandleInformation(hPipe[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    mRes = CreatePipe(&hPipe[0], &hPipe[1], &pipeAttr, 0);
+    assert(mRes != 0);
+
+    mRes = SetHandleInformation(hPipe[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    assert(mRes != 0);
 
     /* create thread for resizing window with SIGWINCH signal */
     pthread_t tid;
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGWINCH);
-    pthread_sigmask(SIG_BLOCK, &set, nullptr);
-    pthread_create(&tid, nullptr, &resize_conpty, (void *)&set);
+    mRes = pthread_sigmask(SIG_BLOCK, &set, nullptr);
+    assert(mRes == 0);
+
+    mRes = pthread_create(&tid, nullptr, resize_conpty, (void *)&set);
+    assert(mRes == 0);
 
     /* create ConHost command line */
-    void *HeapHandle = GetProcessHeap();
-    unsigned int nSize = ExpandEnvironmentStringsA("%SystemRoot%", nullptr, 0);
-    char *sysRoot = (char *)HeapAlloc(HeapHandle, 0, nSize * sizeof(char));
-    ExpandEnvironmentStringsA("%SystemRoot%", sysRoot, nSize);
+    unsigned int nSize;
+    nSize = ExpandEnvironmentStringsA("%SystemRoot%", nullptr, 0);
+    char *sysRoot = (char *)HeapAlloc(GetProcessHeap(), 0, nSize * sizeof(char));
+    nSize = ExpandEnvironmentStringsA("%SystemRoot%", sysRoot, nSize);
+    assert(nSize > 0);
 
     char dest[512];
-    snprintf(
+    mRes = snprintf(
         dest,
         512,
         CONHOST_COMMAND_FORMAT,
@@ -145,8 +156,9 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
         size.Y,
         HandleToUlong(hPipe[0]),
         VT_PARSE_IO_MODE_XTERM_256COLOR);
+    assert(mRes > 0);
 
-    HeapFree(HeapHandle, 0, sysRoot);
+    HeapFree(GetProcessHeap(), 0, sysRoot);
 
     std::string command(dest);
     command.append(program);
@@ -159,15 +171,15 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     si.hStdOutput = mhStdOut;
     si.hStdError = mhStdOut;
 
-    int bRes;
-    bRes = CreateProcessA(NULL, &command[0], NULL, NULL,
+    mRes = CreateProcessA(NULL, &command[0], NULL, NULL,
                           true, 0, NULL, NULL, &si, &pi);
+    assert(mRes != 0);
 
     /* wait for ConHost to complete */
-    if (bRes)
+    if (mRes)
         WaitForSingleObject(pi.hProcess, INFINITE);
     else
-        fprintf(stderr, "CreateProcess: %d\n", GetLastError());
+        printf("CreateProcess error: %d\n", GetLastError());
 
     /* cleanup */
     CloseHandle(pi.hThread);
@@ -178,13 +190,23 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
         termState.exitCleanly(0);
 }
 
+static void usage(const char *prog)
+{
+    printf(
+    "\n"
+    "No executable provided.\n"
+    "Usage: %s <Win32 executable & its options>\n"
+    "Example:\n"
+    "rawpty.exe cmd.exe\n"
+    "rawpty.exe \"cmd.exe /c dir\"\n",
+    prog);
+    exit(1);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2)
-    {
-        fprintf(stderr, "No executable provided.\n");
-        return 1;
-    }
+        usage(argv[0]);
 
     /* append all the arguments except argv[0] */
     std::string program;

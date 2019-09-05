@@ -180,7 +180,7 @@ static void mainLoop(const std::string &spawnCwd,
 
     while (true) {
         g_wakeupFd->wait();
-        const auto newSize = terminalSize();
+        const struct TermSize newSize = terminalSize();
         if (newSize != termSize) {
             Packet p = { sizeof(Packet), Packet::Type::SetSize };
             p.u.termSize = termSize = newSize;
@@ -202,28 +202,31 @@ static void mainLoop(const std::string &spawnCwd,
     g_terminalState.exitCleanly(exitStatus);
 }
 
-static void usage(const char *prog) {
-    printf("Usage: %s [options] [--] [command]...\n", prog);
-    printf("Runs a program within a Windows Subsystem for Linux (WSL) pty\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("  -b, --backend BACKEND\n");
-    printf("                Overrides the default path of wslbridge2-backend to BACKEND\n");
-    printf("  -C, --directory WINDIR\n");
-    printf("                Changes the working directory to WINDIR first\n");
-    printf("  -D, --wsl-dir WINDIR\n");
-    printf("                Changes the working directory to WSL-DIR in backend\n");
-
-    printf("  -d, --distribution Distribution Name\n");
-    printf("                Run the specified distribution.\n");
-    printf("  -e VAR        Copies VAR into the WSL environment.\n");
-    printf("  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n");
-    printf("  -h, --help    Show this usage information\n");
-    printf("  -l            Start a login shell.\n");
-    printf("  --no-login    Do not start a login shell.\n");
-    printf("  -T            Do not use a pty.\n");
-    printf("  -t            Use a pty (as long as stdin is a tty).\n");
-    printf("  -t -t         Force a pty (even if stdin is not a tty).\n");
+static void usage(const char *prog)
+{
+    printf(
+    "Usage: %s [options] [--] [command]...\n"
+    "Runs a program within a Windows Subsystem for Linux (WSL) pty\n"
+    "\n"
+    "Options:\n"
+    "  -b, --backend BACKEND\n"
+    "                Overrides the default path of wslbridge2-backend to BACKEND\n"
+    "  -C, --directory WINDIR\n"
+    "                Changes the working directory to WINDIR first\n"
+    "  -d, --distribution Distribution Name\n"
+    "                Run the specified distribution.\n"
+    "  -D, --wsl-dir WINDIR\n"
+    "                Changes the working directory to WSL-DIR in backend\n"
+    "  -e VAR        Copies VAR into the WSL environment.\n"
+    "  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n"
+    "  -h, --help    Show this usage information\n"
+    "  -l            Start a login shell.\n"
+    "  --no-login    Do not start a login shell.\n"
+    "  -T            Do not use a pty.\n"
+    "  -t            Use a pty (as long as stdin is a tty).\n"
+    "  -t -t         Force a pty (even if stdin is not a tty).\n"
+    "  -u, --user    WSL User Name\n"
+    "                Run as the specified user\n", prog);
     exit(0);
 }
 
@@ -305,7 +308,8 @@ struct PipeHandles {
     HANDLE wh;
 };
 
-static PipeHandles createPipe() {
+static struct PipeHandles createPipe()
+{
     SECURITY_ATTRIBUTES sa {};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
@@ -471,6 +475,11 @@ static std::string stripTrailing(std::string str) {
     return str;
 }
 
+static void invalid_arg(const char *arg)
+{
+    fatal("error: the %s option requires a non-empty string argument\n", arg);
+}
+
 int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "");
@@ -487,6 +496,7 @@ int main(int argc, char *argv[])
     std::string customBackendPath;
     std::string wsl_dir;
     bool has_wsldir = false;
+    std::string userName;
     enum class TtyRequest { Auto, Yes, No, Force } ttyRequest = TtyRequest::Auto;
     enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
 
@@ -496,7 +506,7 @@ int main(int argc, char *argv[])
         loginMode = LoginMode::Yes;
     }
 
-    const char shortopts[] = "+b:C:D:d:e:hlLtT";
+    const char shortopts[] = "+b:C:d:D:e:hlLtTu:";
     const struct option longopts[] = {
         { "backend",        required_argument,  nullptr,     'b' },
         { "directory",      required_argument,  nullptr,     'C' },
@@ -505,6 +515,7 @@ int main(int argc, char *argv[])
         { "help",           no_argument,        nullptr,     'h' },
         { "debug-fork",     no_argument,       &debugFork,    1  },
         { "no-login",       no_argument,        nullptr,     'L' },
+        { "user",           required_argument,  nullptr,     'u' },
         { nullptr,          no_argument,        nullptr,      0  },
     };
 
@@ -517,22 +528,21 @@ int main(int argc, char *argv[])
                 break;
             case 'e': {
                 const char *eq = strchr(optarg, '=');
-                const auto varname = eq ? std::string(optarg, eq - optarg) : std::string(optarg);
-                if (varname.empty()) {
+                const std::string varname = eq ? std::string(optarg, eq - optarg)
+                                            : std::string(optarg);
+                if (varname.empty())
                     fatal("error: -e variable name cannot be empty: '%s'\n", optarg);
-                }
-                if (eq) {
+
+                if (eq)
                     env.set(varname, eq + 1);
-                } else {
+                else
                     env.set(varname);
-                }
                 break;
             }
             case 'C':
                 spawnCwd = optarg;
-                if (spawnCwd.empty()) {
-                    fatal("error: the -C option requires a non-empty string argument\n");
-                }
+                if (spawnCwd.empty())
+                    invalid_arg("directory");
                 break;
             case 'D':
 	        has_wsldir = true;
@@ -557,7 +567,7 @@ int main(int argc, char *argv[])
             case 'd':
                 distroName = optarg;
                 if (distroName.empty())
-                    fatal("error: the --distro argument '%s' is invalid\n", optarg);
+                    invalid_arg("distribution");
                 break;
             case 'l':
                 loginMode = LoginMode::Yes;
@@ -568,8 +578,15 @@ int main(int argc, char *argv[])
             case 'b':
                 customBackendPath = optarg;
                 if (customBackendPath.empty())
-                    fatal("error: the --backend option requires a non-empty string argument\n");
+                    invalid_arg("backend");
                 break;
+
+            case 'u':
+                userName = optarg;
+                if (userName.empty())
+                    invalid_arg("user");
+                break;
+
             default:
                 fatal("Try '%s --help' for more information.\n", argv[0]);
         }
@@ -683,20 +700,24 @@ int main(int argc, char *argv[])
         cmdLine.append(mbsToWcs(distroName));
     }
 
-   /* this option is taken from registry
-    * HKCU\Directory\Background\shell\WSL\command
-    */
+   /* Taken from HKCU\Directory\Background\shell\WSL\command */
     if (!spawnCwd.empty())
     {
         cmdLine.append(L" --cd ");
         cmdLine.append(mbsToWcs(spawnCwd));
     }
 
-    cmdLine.append(L" bash -c ");
+    if (!userName.empty())
+    {
+        cmdLine.append(L" --user ");
+        cmdLine.append(mbsToWcs(userName));
+    }
+
+    cmdLine.append(L" /bin/sh -c ");
     appendWslArg(cmdLine, wslCmdLine);
 
-    const auto outputPipe = createPipe();
-    const auto errorPipe = createPipe();
+    const struct PipeHandles outputPipe = createPipe();
+    const struct PipeHandles errorPipe = createPipe();
     STARTUPINFOEXW sui {};
     sui.StartupInfo.cb = sizeof(sui);
     StartupInfoAttributeList attrList { sui.lpAttributeList, 1 };
@@ -735,8 +756,8 @@ int main(int argc, char *argv[])
         // output pipes are closed.  Finish reading anything bash.exe wrote.
         // bash.exe writes at least one error via stdout in UTF-16;
         // wslbridge-backend could write to stderr in UTF-8.
-        auto outVec = readAllFromHandle(outputPipe.rh);
-        auto errVec = readAllFromHandle(errorPipe.rh);
+        std::vector<char> outVec = readAllFromHandle(outputPipe.rh);
+        std::vector<char> errVec = readAllFromHandle(errorPipe.rh);
         std::wstring outWide(outVec.size() / sizeof(wchar_t), L'\0');
         memcpy(&outWide[0], outVec.data(), outWide.size() * sizeof(wchar_t));
         std::string out { wcsToMbs(outWide, true) };
