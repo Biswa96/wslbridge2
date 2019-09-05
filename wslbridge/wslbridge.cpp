@@ -211,8 +211,10 @@ static void usage(const char *prog)
     "Options:\n"
     "  -b, --backend BACKEND\n"
     "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-    "  -C, --directory WINDIR\n"
+    "  --windir      WINDIR\n"
     "                Changes the working directory to WINDIR first\n"
+    "  --wsldir      WSLDIR\n"
+    "                Changes the working directory to WSLDIR in WSL\n"
     "  -d, --distribution Distribution Name\n"
     "                Run the specified distribution.\n"
     "  -e VAR        Copies VAR into the WSL environment.\n"
@@ -478,6 +480,11 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
+enum long_opts {
+    OPT_WSL_DIR = 0x80,
+    OPT_WIN_DIR = 0x81		
+};
+
 int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "");
@@ -492,6 +499,8 @@ int main(int argc, char *argv[])
     std::string spawnCwd;
     std::string distroName;
     std::string customBackendPath;
+    std::string wsl_dir;
+    bool has_wsldir = false;
     std::string userName;
     enum class TtyRequest { Auto, Yes, No, Force } ttyRequest = TtyRequest::Auto;
     enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
@@ -511,6 +520,8 @@ int main(int argc, char *argv[])
         { "debug-fork",     no_argument,       &debugFork,    1  },
         { "no-login",       no_argument,        nullptr,     'L' },
         { "user",           required_argument,  nullptr,     'u' },
+	{ "wsldir",         required_argument,  nullptr, OPT_WSL_DIR },
+	{ "windir",         required_argument,  nullptr, OPT_WIN_DIR },	
         { nullptr,          no_argument,        nullptr,      0  },
     };
 
@@ -534,11 +545,19 @@ int main(int argc, char *argv[])
                     env.set(varname);
                 break;
             }
+            case OPT_WIN_DIR:
             case 'C':
                 spawnCwd = optarg;
                 if (spawnCwd.empty())
-                    invalid_arg("directory");
+                    invalid_arg("windir");
                 break;
+            case OPT_WSL_DIR:
+	        has_wsldir = true;
+		wsl_dir = optarg;
+		if (wsl_dir.empty()) {
+                    invalid_arg("wsldir");
+                }
+	        break;
             case 'h':
                 usage(argv[0]);
                 break;
@@ -638,6 +657,10 @@ int main(int argc, char *argv[])
         appendWslArg(wslCmdLine, L"--debug-fork");
     }
 
+    if (has_wsldir) {
+        appendWslArg(wslCmdLine, L"-C");
+        appendWslArg(wslCmdLine, mbsToWcs(wsl_dir));
+    }
     std::array<wchar_t, 1024> buffer;
     int iRet = swprintf(buffer.data(), buffer.size(),
                         L" -3%d -0%d -1%d -w%d -t%d",

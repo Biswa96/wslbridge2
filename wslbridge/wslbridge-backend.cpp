@@ -527,7 +527,7 @@ int main(int argc, char *argv[]) {
     };
 
     int ch = 0;
-    while ((ch = getopt_long(argc, argv, "+3:0:1:2:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1) {
+    while ((ch = getopt_long(argc, argv, "+3:0:1:2:c:r:w:t:e:C:lP:", kOptionTable, nullptr)) != -1) {
         switch (ch) {
             case 0:
                 // This is returned for the two long options.  getopt_long

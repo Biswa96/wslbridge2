@@ -217,8 +217,10 @@ static void usage(const char *prog)
            "Options:\n"
            "  -b, --backend BACKEND\n"
            "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-           "  -C, --directory WINDIR\n"
+           "  --windir      WINDIR\n"
            "                Changes the working directory to WINDIR first\n"
+	   "  --wsldir      WSLDIR\n"
+           "                Changes the working directory to WSLDIR in WSL\n"
            "  -d, --distribution Distribution Name\n"
            "                Run the specified distribution\n"
            "  -h, --help    Show this usage information\n"
@@ -232,6 +234,10 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
+enum long_opts {
+    OPT_WSL_DIR = 0x80,
+    OPT_WIN_DIR = 0x81		
+};
 int main(int argc, char *argv[])
 {
     srand(time(NULL));
@@ -248,6 +254,8 @@ int main(int argc, char *argv[])
         { "distribution",  required_argument, 0, 'd' },
         { "help",          no_argument,       0, 'h' },
         { "user",          required_argument, 0, 'u' },
+	{ "wsldir",        required_argument, 0, OPT_WSL_DIR },
+	{ "windir",        required_argument, 0, OPT_WIN_DIR },
         { 0,               no_argument,       0,  0  },
     };
 
@@ -255,6 +263,8 @@ int main(int argc, char *argv[])
     std::string distroName;
     std::string customBackendPath;
     std::string userName;
+    bool has_wsldir = false;
+    std::string wsldir;
     int c = 0;
 
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
@@ -270,11 +280,17 @@ int main(int argc, char *argv[])
                 if (customBackendPath.empty())
                     invalid_arg("backend");
                 break;
-
+            case OPT_WIN_DIR:
             case 'C':
                 spawnCwd = optarg;
                 if (spawnCwd.empty())
-                    invalid_arg("directory");
+                    invalid_arg("windir");
+                break;
+            case OPT_WSL_DIR:
+                wsldir = optarg;
+		has_wsldir = true;
+                if (wsldir.empty())
+                    invalid_arg("wsldir");
                 break;
 
             case 'd':
@@ -320,6 +336,10 @@ int main(int argc, char *argv[])
 
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
+	if (has_wsldir) {
+	  wslCmdLine.append(L" --path ");
+	  wslCmdLine.append(mbsToWcs(wsldir));
+	}
     }
 
     /* Append wsl.exe options and its arguments */
