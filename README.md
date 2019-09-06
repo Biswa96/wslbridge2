@@ -6,9 +6,10 @@
 
 # wslbridge2
 
-[![Licence](https://img.shields.io/github/license/Biswa96/wslbridge2.svg)][1]
-[![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg)][2]
-[![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg)]()
+[![Licence](https://img.shields.io/github/license/Biswa96/wslbridge2.svg?style=flat-square)][1]
+[![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg?style=flat-square)][2]
+[![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg?style=flat-square)]()
+[![Appveyor Build](https://img.shields.io/appveyor/ci/Biswa96/wslbridge2.svg?style=flat-square)]()
 
 Explore various ways to connect WSL with Windows terminal emulators.
 
@@ -20,6 +21,12 @@ All binaries will be saved in `bin` folder.
 
 
 ## How to use
+
+Download the released stable binaries from [Release page]. Or to test unstable
+nightly builds, go to [Appveyor project] and download the 7zip artifact.
+
+[Release page]: https://github.com/Biswa96/wslbridge2/releases
+[Appveyor project]: https://ci.appveyor.com/project/Biswa96/wslbridge2
 
 ### Requirements:
 
@@ -68,6 +75,16 @@ according to future Windows 10 releases.
   - [wslbridge](https://github.com/rprichard/wslbridge)
   - [win32-console-docs](https://github.com/rprichard/win32-console-docs)
   - [XConPty](https://github.com/Biswa96/XConPty)
+
+## Contributions
+
+Contributions are greatly appreciated. Please keep these following points:
+
+* Try contact me or add an issue before creating a pull request.
+* Make the code easy to read and understand.
+* Use 4 spaces for indentation.
+* If you are not programmer you can also contribute to update documentations.
+
 
 ## License
 
