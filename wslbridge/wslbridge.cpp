@@ -211,10 +211,6 @@ static void usage(const char *prog)
     "Options:\n"
     "  -b, --backend BACKEND\n"
     "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-    "  --windir      WINDIR\n"
-    "                Changes the working directory to WINDIR first\n"
-    "  --wsldir      WSLDIR\n"
-    "                Changes the working directory to WSLDIR in WSL\n"
     "  -d, --distribution Distribution Name\n"
     "                Run the specified distribution.\n"
     "  -e VAR        Copies VAR into the WSL environment.\n"
@@ -226,7 +222,11 @@ static void usage(const char *prog)
     "  -t            Use a pty (as long as stdin is a tty).\n"
     "  -t -t         Force a pty (even if stdin is not a tty).\n"
     "  -u, --user    WSL User Name\n"
-    "                Run as the specified user\n", prog);
+    "                Run as the specified user\n"
+    "  -w, --windir  Folder\n"
+    "                Changes the working directory to Windows style path\n"
+    "  -W, --wsldir  Folder\n"
+    "                Changes the working directory to Unix style path\n", prog);
     exit(0);
 }
 
@@ -480,27 +480,20 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
-enum long_opts {
-    OPT_WSL_DIR = 0x80,
-    OPT_WIN_DIR = 0x81		
-};
-
 int main(int argc, char *argv[])
 {
     setlocale(LC_ALL, "");
     cygwin_internal(CW_SYNC_WINENV);
     g_wakeupFd = new WakeupFd();
 
-    if (argc == 3 && !strcmp(argv[1], "--press-return")) {
+    if (argc == 3 && !strcmp(argv[1], "--press-return"))
         return handlePressReturn(argv[2]);
-    }
 
     Environment env;
-    std::string spawnCwd;
     std::string distroName;
     std::string customBackendPath;
-    std::string wsl_dir;
-    bool has_wsldir = false;
+    std::string winDir;
+    std::string wslDir;
     std::string userName;
     enum class TtyRequest { Auto, Yes, No, Force } ttyRequest = TtyRequest::Auto;
     enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
@@ -511,17 +504,16 @@ int main(int argc, char *argv[])
         loginMode = LoginMode::Yes;
     }
 
-    const char shortopts[] = "+b:C:d:e:hlLtTu:";
+    const char shortopts[] = "+b:d:e:hlLtTu:w:W:";
     const struct option longopts[] = {
         { "backend",        required_argument,  nullptr,     'b' },
-        { "directory",      required_argument,  nullptr,     'C' },
         { "distribution",   required_argument,  nullptr,     'd' },
         { "help",           no_argument,        nullptr,     'h' },
         { "debug-fork",     no_argument,       &debugFork,    1  },
         { "no-login",       no_argument,        nullptr,     'L' },
         { "user",           required_argument,  nullptr,     'u' },
-	{ "wsldir",         required_argument,  nullptr, OPT_WSL_DIR },
-	{ "windir",         required_argument,  nullptr, OPT_WIN_DIR },	
+        { "windir",         required_argument,  nullptr,     'w' },
+        { "wsldir",         required_argument,  nullptr,     'W' },
         { nullptr,          no_argument,        nullptr,      0  },
     };
 
@@ -545,19 +537,7 @@ int main(int argc, char *argv[])
                     env.set(varname);
                 break;
             }
-            case OPT_WIN_DIR:
-            case 'C':
-                spawnCwd = optarg;
-                if (spawnCwd.empty())
-                    invalid_arg("windir");
-                break;
-            case OPT_WSL_DIR:
-	        has_wsldir = true;
-		wsl_dir = optarg;
-		if (wsl_dir.empty()) {
-                    invalid_arg("wsldir");
-                }
-	        break;
+
             case 'h':
                 usage(argv[0]);
                 break;
@@ -592,6 +572,18 @@ int main(int argc, char *argv[])
                 userName = optarg;
                 if (userName.empty())
                     invalid_arg("user");
+                break;
+
+            case 'w':
+                winDir = optarg;
+                if (winDir.empty())
+                    invalid_arg("windir");
+                break;
+
+            case 'W':
+                wslDir = optarg;
+                if (wslDir.empty())
+                    invalid_arg("wsldir");
                 break;
 
             default:
@@ -653,14 +645,15 @@ int main(int argc, char *argv[])
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
 
-    if (debugFork) {
+    if (debugFork)
         appendWslArg(wslCmdLine, L"--debug-fork");
+
+    if (!wslDir.empty())
+    {
+        appendWslArg(wslCmdLine, L"-C");
+        appendWslArg(wslCmdLine, mbsToWcs(wslDir));
     }
 
-    if (has_wsldir) {
-        appendWslArg(wslCmdLine, L"-C");
-        appendWslArg(wslCmdLine, mbsToWcs(wsl_dir));
-    }
     std::array<wchar_t, 1024> buffer;
     int iRet = swprintf(buffer.data(), buffer.size(),
                         L" -3%d -0%d -1%d -w%d -t%d",
@@ -672,12 +665,15 @@ int main(int argc, char *argv[])
     assert(iRet > 0);
     wslCmdLine.append(buffer.data());
 
-    if (usePty) {
+    if (usePty)
+    {
         iRet = swprintf(buffer.data(), buffer.size(),
                         L" --pty -c%d -r%d",
                         initialSize.cols,
                         initialSize.rows);
-    } else {
+    }
+    else
+    {
         iRet = swprintf(buffer.data(), buffer.size(),
                         L" --pipes -2%d",
                         errorSocket->port());
@@ -708,10 +704,10 @@ int main(int argc, char *argv[])
     }
 
    /* Taken from HKCU\Directory\Background\shell\WSL\command */
-    if (!spawnCwd.empty())
+    if (!winDir.empty())
     {
         cmdLine.append(L" --cd ");
-        cmdLine.append(mbsToWcs(spawnCwd));
+        cmdLine.append(mbsToWcs(winDir));
     }
 
     if (!userName.empty())
@@ -815,7 +811,7 @@ int main(int argc, char *argv[])
 
     backendStarted = true;
 
-    mainLoop(spawnCwd,
+    mainLoop(winDir,
              usePty, controlSocketC,
              inputSocketC, outputSocketC, errorSocketC,
              initialSize);

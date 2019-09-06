@@ -217,15 +217,16 @@ static void usage(const char *prog)
            "Options:\n"
            "  -b, --backend BACKEND\n"
            "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-           "  --windir      WINDIR\n"
-           "                Changes the working directory to WINDIR first\n"
-	   "  --wsldir      WSLDIR\n"
-           "                Changes the working directory to WSLDIR in WSL\n"
-           "  -d, --distribution Distribution Name\n"
+           "  -d, --distribution   Distribution Name\n"
            "                Run the specified distribution\n"
            "  -h, --help    Show this usage information\n"
            "  -u, --user    WSL User Name\n"
-           "                Run as the specified user\n", prog);
+           "                Run as the specified user\n"
+           "  -w, --windir  Folder\n"
+           "                Changes the working directory to Windows style path\n"
+           "  -W, --wsldir  Folder\n"
+           "                Changes the working directory to Unix style path\n",
+           prog);
     exit(0);
 }
 
@@ -234,10 +235,6 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
-enum long_opts {
-    OPT_WSL_DIR = 0x80,
-    OPT_WIN_DIR = 0x81		
-};
 int main(int argc, char *argv[])
 {
     srand(time(NULL));
@@ -247,24 +244,22 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const char shortopts[] = "+b:C:d:hu:";
+    const char shortopts[] = "+b:d:hu:w:W:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
-        { "directory",     required_argument, 0, 'C' },
         { "distribution",  required_argument, 0, 'd' },
         { "help",          no_argument,       0, 'h' },
         { "user",          required_argument, 0, 'u' },
-	{ "wsldir",        required_argument, 0, OPT_WSL_DIR },
-	{ "windir",        required_argument, 0, OPT_WIN_DIR },
+        { "windir",        required_argument, 0, 'w' },
+        { "wsldir",        required_argument, 0, 'W' },
         { 0,               no_argument,       0,  0  },
     };
 
-    std::string spawnCwd;
     std::string distroName;
     std::string customBackendPath;
     std::string userName;
-    bool has_wsldir = false;
-    std::string wsldir;
+    std::string winDir;
+    std::string wslDir;
     int c = 0;
 
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
@@ -279,18 +274,6 @@ int main(int argc, char *argv[])
                 customBackendPath = optarg;
                 if (customBackendPath.empty())
                     invalid_arg("backend");
-                break;
-            case OPT_WIN_DIR:
-            case 'C':
-                spawnCwd = optarg;
-                if (spawnCwd.empty())
-                    invalid_arg("windir");
-                break;
-            case OPT_WSL_DIR:
-                wsldir = optarg;
-		has_wsldir = true;
-                if (wsldir.empty())
-                    invalid_arg("wsldir");
                 break;
 
             case 'd':
@@ -307,6 +290,18 @@ int main(int argc, char *argv[])
                 userName = optarg;
                 if (userName.empty())
                     invalid_arg("user");
+                break;
+
+            case 'w':
+                winDir = optarg;
+                if (winDir.empty())
+                    invalid_arg("windir");
+                break;
+
+            case 'W':
+                wslDir = optarg;
+                if (wslDir.empty())
+                    invalid_arg("wsldir");
                 break;
 
             default:
@@ -336,10 +331,12 @@ int main(int argc, char *argv[])
 
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
-	if (has_wsldir) {
-	  wslCmdLine.append(L" --path ");
-	  wslCmdLine.append(mbsToWcs(wsldir));
-	}
+    }
+
+    if (!wslDir.empty())
+    {
+        wslCmdLine.append(L" --path ");
+        wslCmdLine.append(mbsToWcs(wslDir));
     }
 
     /* Append wsl.exe options and its arguments */
@@ -355,10 +352,10 @@ int main(int argc, char *argv[])
     }
 
    /* Taken from HKCU\Directory\Background\shell\WSL\command */
-    if (!spawnCwd.empty())
+    if (!winDir.empty())
     {
         cmdLine.append(L" --cd ");
-        cmdLine.append(mbsToWcs(spawnCwd));
+        cmdLine.append(mbsToWcs(winDir));
     }
 
     if (!userName.empty())

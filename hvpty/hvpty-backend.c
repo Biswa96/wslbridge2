@@ -95,7 +95,7 @@ static void usage(const char *prog)
            "  -c, --cols N   set N columns for pty\n"
            "  -h, --help     show this usage information\n"
            "  -r, --rows N   set N rows for pty\n"
-	   "  -P, --path dir start in certain path\n"
+           "  -P, --path dir start in certain path\n"
            "  -p, --port N   set port N to initialize connections\n", prog);
     exit(0);
 }
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
         { "cols",  required_argument, 0, 'c' },
         { "help",  no_argument,       0, 'h' },
         { "rows",  required_argument, 0, 'r' },
-	{ "path",  required_argument, 0, 'P' },
+        { "path",  required_argument, 0, 'P' },
         { "port",  required_argument, 0, 'p' },
         { 0,       no_argument,       0,  0  },
     };
@@ -145,15 +145,12 @@ int main(int argc, char *argv[])
             case 'P':
                 work_path = optarg;
                 break;
-	    default:
+            default:
                 try_help(argv[0]);
                 break;
         }
     }
 
-    if (work_path) {
-        chdir(work_path);
-    }
     if (winp.ws_col == 0 || winp.ws_row == 0)
     {
         ret = ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
@@ -188,6 +185,10 @@ int main(int argc, char *argv[])
 
     if (child > 0) /* parent or master */
     {
+        /* Use dupped master fd to read OR write */
+        int mfd_dp = dup(mfd);
+        assert(mfd_dp > 0);
+
         sigset_t set;
         sigemptyset(&set);
         sigaddset(&set, SIGCHLD);
@@ -216,7 +217,7 @@ int main(int argc, char *argv[])
             {
                 ret = recv(ioSockets.inputSock, data, sizeof data, 0);
                 assert(ret > 0);
-                ret = write(mfd, &data, ret);
+                ret = write(mfd_dp, &data, ret);
             }
 
             /* Resize window when buffer received in control socket */
@@ -260,17 +261,25 @@ int main(int argc, char *argv[])
         }
 
         close(sigfd);
+        close(mfd_dp);
         close(mfd);
     }
     else if (child == 0) /* child or slave */
     {
+        /* Changed directory should affect in child process */
+        if (work_path)
+        {
+            ret = chdir(work_path);
+            assert(ret == 0);
+        }
+
         struct passwd *pwd = getpwuid(getuid());
         assert(pwd != NULL);
         if (pwd->pw_shell == NULL)
             pwd->pw_shell = "/bin/sh";
 
-        char *args = NULL;
-        ret = execvp(pwd->pw_shell, &args);
+        char *args[] = {pwd->pw_shell, NULL};
+        ret = execvp(pwd->pw_shell, args);
         assert(ret > 0);
     }
     else
