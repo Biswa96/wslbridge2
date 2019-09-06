@@ -1,0 +1,64 @@
+# This file is part of wslbridge2 project
+# Licensed under the GNU General Public License version 3
+# Copyright (C) 2019 Biswapriyo Nath
+
+
+# Build image
+image:
+- Ubuntu
+- Visual Studio 2017
+
+# Version format
+version: "0.{build}"
+
+# Start builds on tags only
+skip_non_tags: true
+
+# Only build the master branch
+branches:
+  only:
+    - master
+
+# Only build for X86_64 architecture
+platform: x64
+
+environment:
+  backendJob: 'image: Ubuntu'
+
+before_build:
+- sh: |
+    make -s
+
+- cmd: |
+    set PATH=C:\cygwin64;C:\cygwin64\bin;C:\cygwin64\usr\bin;%PATH%
+    make -s
+
+build_script:
+- ps: |
+    if ($env:APPVEYOR_JOB_NAME -eq $env:backendJob)
+    {
+        Get-ChildItem .\bin\wslbridge2-backend | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
+        Get-ChildItem .\bin\hvpty-backend | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
+    }
+
+    if ($env:APPVEYOR_JOB_NAME -ne $env:backendJob)
+    {
+        $headers = @{ "Content-type" = "application/json" }
+        $ProjectUri="https://ci.appveyor.com/api/projects/$env:APPVEYOR_ACCOUNT_NAME/$env:APPVEYOR_PROJECT_SLUG"
+        $project = Invoke-RestMethod -Uri $ProjectUri -Headers $headers -Method GET
+        $jobToWaitJson = $project.build.jobs | where {$_.name -eq $env:backendJob}
+        $jobToWaitId = $jobToWaitJson.jobId;
+
+        Start-FileDownload "https://ci.appveyor.com/api/buildjobs/$jobToWaitId/artifacts/wslbridge2-backend"
+        Start-FileDownload "https://ci.appveyor.com/api/buildjobs/$jobToWaitId/artifacts/hvpty-backend"
+        Move-Item -path .\wslbridge2-backend .\bin
+        Move-Item -path .\hvpty-backend .\bin
+    }
+
+after_build:
+- cmd: |
+    dir /b bin
+    7z a -mx9 wslbridge2 bin\ > NUL 2>&1
+
+artifacts:
+  - path: wslbridge2.7z
