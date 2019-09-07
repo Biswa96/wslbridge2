@@ -22,6 +22,9 @@
 
 #include <linux/vm_sockets.h>
 
+#include <string>
+#include <vector>
+
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
@@ -38,11 +41,11 @@ union IoSockets
 };
 
 /* Return created client socket to send */
-static int Initialize(unsigned int initPort)
+static int Initialize(const unsigned int initPort)
 {
     int ret;
 
-    int cSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int cSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
     assert(cSock > 0);
 
     struct sockaddr_vm addr;
@@ -62,12 +65,13 @@ static int create_vmsock(unsigned int *randomPort)
 {
     int ret;
 
-    int sSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int sSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
     assert(sSock > 0);
 
     struct sockaddr_vm addr;
     memset(&addr, 0, sizeof addr);
 
+    /* Bind to any available port */
     addr.svm_family = AF_VSOCK;
     addr.svm_port = VMADDR_PORT_ANY;
     addr.svm_cid = VMADDR_CID_ANY;
@@ -81,22 +85,24 @@ static int create_vmsock(unsigned int *randomPort)
     ret = listen(sSock, -1);
     assert(ret == 0);
 
-    /* return port number and socket to caller */
+    /* Return port number and socket to caller */
     *randomPort = addr.svm_port;
     return sSock;
 }
 
 static void usage(const char *prog)
 {
-    printf("backend for hvpty using AF_VSOCK sockets\n"
-           "Usage: %s [--] [options] [arguments]\n"
-           "\n"
-           "Options:\n"
-           "  -c, --cols N   set N columns for pty\n"
-           "  -h, --help     show this usage information\n"
-           "  -r, --rows N   set N rows for pty\n"
-           "  -P, --path dir start in certain path\n"
-           "  -p, --port N   set port N to initialize connections\n", prog);
+    printf(
+    "backend for hvpty using AF_VSOCK sockets\n"
+    "Usage: %s [--] [options] [arguments]\n"
+    "\n"
+    "Options:\n"
+    "  -c, --cols N   Set N columns for pty\n"
+    "  -h, --help     Show this usage information\n"
+    "  -P, --path dir Start in certain path\n"
+    "  -p, --port N   Set port N to initialize connections\n"
+    "  -r, --rows N   Set N rows for pty\n",
+    prog);
     exit(0);
 }
 
@@ -114,18 +120,19 @@ int main(int argc, char *argv[])
     int ret;
     struct winsize winp;
     unsigned int initPort = 0, randomPort = 0;
+    std::string workDir;
     int c = 0;
 
-    const char shortopts[] = "+c:hr:P:p:";
+    const char shortopts[] = "+c:hp:P:r:";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "help",  no_argument,       0, 'h' },
-        { "rows",  required_argument, 0, 'r' },
-        { "path",  required_argument, 0, 'P' },
         { "port",  required_argument, 0, 'p' },
+        { "path",  required_argument, 0, 'P' },
+        { "rows",  required_argument, 0, 'r' },
         { 0,       no_argument,       0,  0  },
     };
-    char *work_path = NULL;
+
     while ((c = getopt_long(argc, argv, shortopts, longopts, NULL)) != -1)
     {
         switch (c)
@@ -139,11 +146,11 @@ int main(int argc, char *argv[])
             case 'p':
                 initPort = atoi(optarg);
                 break;
+            case 'P':
+                workDir = optarg;
+                break;
             case 'r':
                 winp.ws_row = atoi(optarg);
-                break;
-            case 'P':
-                work_path = optarg;
                 break;
             default:
                 try_help(argv[0]);
@@ -151,6 +158,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    /* If size not provided use master window size */
     if (winp.ws_col == 0 || winp.ws_row == 0)
     {
         ret = ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
@@ -179,14 +187,14 @@ int main(int argc, char *argv[])
 
     int mfd;
     char ptyname[16];
-    pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
+    const pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
     if (IsDebugMode)
         printf("pty name: %s\n", ptyname);
 
     if (child > 0) /* parent or master */
     {
         /* Use dupped master fd to read OR write */
-        int mfd_dp = dup(mfd);
+        const int mfd_dp = dup(mfd);
         assert(mfd_dp > 0);
 
         sigset_t set;
@@ -195,7 +203,7 @@ int main(int argc, char *argv[])
         ret = sigprocmask(SIG_BLOCK, &set, NULL);
         assert(ret == 0);
 
-        int sigfd = signalfd(-1, &set, 0);
+        const int sigfd = signalfd(-1, &set, 0);
         assert(sigfd > 0);
 
         struct pollfd fds[] = {
@@ -248,6 +256,7 @@ int main(int argc, char *argv[])
             {
                 for (int i = 0; i < 4; i++)
                     shutdown(ioSockets.sock[i], SHUT_RDWR);
+                break;
             }
 
             /* Break if child process in slave side is terminated */
@@ -267,19 +276,22 @@ int main(int argc, char *argv[])
     else if (child == 0) /* child or slave */
     {
         /* Changed directory should affect in child process */
-        if (work_path)
+        if (!workDir.empty())
         {
-            ret = chdir(work_path);
+            ret = chdir(workDir.c_str());
             assert(ret == 0);
         }
 
         struct passwd *pwd = getpwuid(getuid());
-        assert(pwd != NULL);
-        if (pwd->pw_shell == NULL)
-            pwd->pw_shell = "/bin/sh";
+        assert(pwd != nullptr);
+        if (pwd->pw_shell == nullptr)
+            pwd->pw_shell = strdup("/bin/sh");
 
-        char *args[] = {pwd->pw_shell, NULL};
-        ret = execvp(pwd->pw_shell, args);
+        std::vector<char*> args;
+        args.push_back(pwd->pw_shell);
+        args.push_back(nullptr);
+
+        ret = execvp(pwd->pw_shell, args.data());
         assert(ret > 0);
     }
     else

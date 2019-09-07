@@ -7,19 +7,19 @@
 STRIP ?= strip
 NAME = hvpty-backend
 BINDIR = ../bin
-CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c99 -Wall
-LFLAGS = -lutil -static-libgcc
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c++11 -Wall
+LFLAGS = -lutil -static-libgcc -static-libstdc++
 BINS = \
 $(BINDIR)/hvpty-backend.o
 
 all : $(BINDIR) $(NAME)
 
 $(NAME) : $(BINS)
-	$(CC) $^ $(LFLAGS) -o $(BINDIR)/$@
+	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
 
-$(BINDIR)/hvpty-backend.o : hvpty-backend.c
-	$(CC) -c $(CFLAGS) $< -o $@
+$(BINDIR)/hvpty-backend.o : hvpty-backend.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR) :
 	mkdir -p $(BINDIR)
