@@ -44,7 +44,7 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
 {
     int ret;
 
-    SOCKET sServer = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
+    const SOCKET sServer = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
     assert(sServer > 0);
 
     const int optval = 1;
@@ -121,7 +121,7 @@ static SOCKET create_hvsock(unsigned int randomPort, GUID *VmId)
 {
     int ret;
 
-    SOCKET sock = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
+    const SOCKET sock = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
     assert(sock > 0);
 
     const int optval = 1;
@@ -211,22 +211,25 @@ static void* send_buffer(void *param)
 
 static void usage(const char *prog)
 {
-    printf("backend for hvpty using AF_VSOCK sockets\n"
-           "Usage: %s [--] [options] [arguments]\n"
-           "\n"
-           "Options:\n"
-           "  -b, --backend BACKEND\n"
-           "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-           "  -d, --distribution   Distribution Name\n"
-           "                Run the specified distribution\n"
-           "  -h, --help    Show this usage information\n"
-           "  -u, --user    WSL User Name\n"
-           "                Run as the specified user\n"
-           "  -w, --windir  Folder\n"
-           "                Changes the working directory to Windows style path\n"
-           "  -W, --wsldir  Folder\n"
-           "                Changes the working directory to Unix style path\n",
-           prog);
+    printf(
+    "Run a program in WSL using AF_HYPERV sockets\n"
+    "Usage: %s [--] [options] [arguments]\n"
+    "\n"
+    "Options:\n"
+    "  -b, --backend BACKEND\n"
+    "                    Overrides the default path of wslbridge2-backend to BACKEND\n"
+    "  -d, --distribution Distribution Name\n"
+    "                    Run the specified distribution\n"
+    "  -h, --help        Show this usage information\n"
+    "  -l, --login       Start a login shell\n"
+    "  -L, --no-login    Do not start a login shell\n"
+    "  -u, --user WSL User Name\n"
+    "                    Run as the specified user\n"
+    "  -w, --windir Folder\n"
+    "                    Changes the working directory to Windows style path\n"
+    "  -W, --wsldir Folder\n"
+    "                    Changes the working directory to Unix style path\n",
+    prog);
     exit(0);
 }
 
@@ -237,18 +240,20 @@ static void invalid_arg(const char *arg)
 
 int main(int argc, char *argv[])
 {
-    srand(time(NULL));
+    srand(time(nullptr));
     int ret;
 
     struct WSAData wdata;
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const char shortopts[] = "+b:d:hu:w:W:";
+    const char shortopts[] = "+b:d:hlLu:w:W:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
         { "help",          no_argument,       0, 'h' },
+        { "login",         no_argument,       0, 'l' },
+        { "no-login",      no_argument,       0, 'L' },
         { "user",          required_argument, 0, 'u' },
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
@@ -260,8 +265,12 @@ int main(int argc, char *argv[])
     std::string userName;
     std::string winDir;
     std::string wslDir;
-    int c = 0;
 
+    enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
+    if (argv[0][0] == '-')
+        loginMode = LoginMode::Yes;
+
+    int c = 0;
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
         switch (c)
@@ -284,6 +293,14 @@ int main(int argc, char *argv[])
 
             case 'h':
                 usage(argv[0]);
+                break;
+
+            case 'l':
+                loginMode = LoginMode::Yes;
+                break;
+
+            case 'L':
+                loginMode = LoginMode::No;
                 break;
 
             case 'u':
@@ -322,6 +339,14 @@ int main(int argc, char *argv[])
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
 
+    /* If no extra command use login mode by default */
+    const bool hasCommand = optind < argc;
+    if (loginMode == LoginMode::Auto)
+        loginMode = hasCommand ? LoginMode::No : LoginMode::Yes;
+
+    if (loginMode == LoginMode::Yes)
+        appendWslArg(wslCmdLine, L"--login");
+
     {
         std::array<wchar_t, 1024> buffer;
         ret = swprintf(buffer.data(), buffer.size(),
@@ -335,8 +360,9 @@ int main(int argc, char *argv[])
 
     if (!wslDir.empty())
     {
-        wslCmdLine.append(L" --path ");
+        wslCmdLine.append(L" --path \"");
         wslCmdLine.append(mbsToWcs(wslDir));
+        wslCmdLine.append(L"\"");
     }
 
     /* Append wsl.exe options and its arguments */
@@ -354,8 +380,9 @@ int main(int argc, char *argv[])
    /* Taken from HKCU\Directory\Background\shell\WSL\command */
     if (!winDir.empty())
     {
-        cmdLine.append(L" --cd ");
+        cmdLine.append(L" --cd \"");
         cmdLine.append(mbsToWcs(winDir));
+        cmdLine.append(L"\"");
     }
 
     if (!userName.empty())

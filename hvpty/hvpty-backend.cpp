@@ -99,6 +99,7 @@ static void usage(const char *prog)
     "Options:\n"
     "  -c, --cols N   Set N columns for pty\n"
     "  -h, --help     Show this usage information\n"
+    "  -l, --login    Start a login shell\n"
     "  -P, --path dir Start in certain path\n"
     "  -p, --port N   Set port N to initialize connections\n"
     "  -r, --rows N   Set N rows for pty\n",
@@ -121,12 +122,14 @@ int main(int argc, char *argv[])
     struct winsize winp;
     unsigned int initPort = 0, randomPort = 0;
     std::string workDir;
+    bool loginMode = false;
     int c = 0;
 
-    const char shortopts[] = "+c:hp:P:r:";
+    const char shortopts[] = "+c:hlp:P:r:";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "help",  no_argument,       0, 'h' },
+        { "login", no_argument,       0, 'l' },
         { "port",  required_argument, 0, 'p' },
         { "path",  required_argument, 0, 'P' },
         { "rows",  required_argument, 0, 'r' },
@@ -142,6 +145,9 @@ int main(int argc, char *argv[])
                 break;
             case 'h':
                 usage(argv[0]);
+                break;
+            case 'l':
+                loginMode = true;
                 break;
             case 'p':
                 initPort = atoi(optarg);
@@ -289,6 +295,8 @@ int main(int argc, char *argv[])
 
         std::vector<char*> args;
         args.push_back(pwd->pw_shell);
+        if (loginMode)
+            args.push_back(strdup("--login"));
         args.push_back(nullptr);
 
         ret = execvp(pwd->pw_shell, args.data());
