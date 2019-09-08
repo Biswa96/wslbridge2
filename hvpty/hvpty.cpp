@@ -339,10 +339,11 @@ int main(int argc, char *argv[])
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
 
-    /* If no extra command use login mode by default */
+    /* If no extra command use login mode by default
     const bool hasCommand = optind < argc;
     if (loginMode == LoginMode::Auto)
         loginMode = hasCommand ? LoginMode::No : LoginMode::Yes;
+    */
 
     if (loginMode == LoginMode::Yes)
         appendWslArg(wslCmdLine, L"--login");

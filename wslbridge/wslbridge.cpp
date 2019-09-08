@@ -591,10 +591,12 @@ int main(int argc, char *argv[])
         }
     }
 
+    /*
     const bool hasCommand = optind < argc;
     if (loginMode == LoginMode::Auto) {
         loginMode = hasCommand ? LoginMode::No : LoginMode::Yes;
     }
+    */
     if (ttyRequest == TtyRequest::Auto) {
         ttyRequest = loginMode == LoginMode::No ? TtyRequest::No : TtyRequest::Yes;
     }

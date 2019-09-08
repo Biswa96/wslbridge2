@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
         std::vector<char*> args;
         args.push_back(pwd->pw_shell);
         if (loginMode)
-            args.push_back(strdup("--login"));
+            args.push_back(strdup("-l"));
         args.push_back(nullptr);
 
         ret = execvp(pwd->pw_shell, args.data());
