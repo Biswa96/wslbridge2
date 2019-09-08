@@ -18,9 +18,11 @@
 #include <unistd.h>
 
 #include <string>
+#include <vector>
 
 #include "../hvsocket/hvsocket.h"
 #include "../wslbridge/Helpers.hpp"
+#include "../wslbridge/Environment.hpp"
 #include "../wslbridge/SocketIo.hpp"
 #include "../wslbridge/TerminalState.hpp"
 
@@ -96,7 +98,6 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
         si.wShowWindow = SW_SHOW;
     else
         si.wShowWindow = SW_HIDE;
-
 
     if (!command.empty())
     {
@@ -220,6 +221,8 @@ static void usage(const char *prog)
     "                    Overrides the default path of wslbridge2-backend to BACKEND\n"
     "  -d, --distribution Distribution Name\n"
     "                    Run the specified distribution\n"
+    "  -e VAR            Copies VAR into the WSL environment\n"
+    "  -e VAR=VAL        Sets VAR to VAL in the WSL environment\n"
     "  -h, --help        Show this usage information\n"
     "  -l, --login       Start a login shell\n"
     "  -L, --no-login    Do not start a login shell\n"
@@ -247,7 +250,7 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(ret == 0);
 
-    const char shortopts[] = "+b:d:hlLu:w:W:";
+    const char shortopts[] = "+b:d:e:hlLu:w:W:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
@@ -260,6 +263,7 @@ int main(int argc, char *argv[])
         { 0,               no_argument,       0,  0  },
     };
 
+    Environment env;
     std::string distroName;
     std::string customBackendPath;
     std::string userName;
@@ -290,6 +294,22 @@ int main(int argc, char *argv[])
                 if (distroName.empty())
                     invalid_arg("distribution");
                 break;
+
+            case 'e':
+            {
+                const char *eq = strchr(optarg, '=');
+                const std::string varname = eq ?
+                                            std::string(optarg, eq - optarg)
+                                            : std::string(optarg);
+                if (varname.empty())
+                    invalid_arg("environment");
+
+                if (eq)
+                    env.set(varname, eq + 1);
+                else
+                    env.set(varname);
+                break;
+            }
 
             case 'h':
                 usage(argv[0]);
@@ -347,6 +367,9 @@ int main(int argc, char *argv[])
 
     if (loginMode == LoginMode::Yes)
         appendWslArg(wslCmdLine, L"--login");
+
+    for (const auto &envPair : env.pairs())
+        appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
 
     {
         std::array<wchar_t, 1024> buffer;

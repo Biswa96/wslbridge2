@@ -122,10 +122,11 @@ int main(int argc, char *argv[])
     struct winsize winp;
     unsigned int initPort = 0, randomPort = 0;
     std::string workDir;
-    bool loginMode = false;
+    std::vector<char*> env;
+    bool hasEnv = false, loginMode = false;
     int c = 0;
 
-    const char shortopts[] = "+c:hlp:P:r:";
+    const char shortopts[] = "+c:e:hlp:P:r:";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "help",  no_argument,       0, 'h' },
@@ -142,6 +143,10 @@ int main(int argc, char *argv[])
         {
             case 'c':
                 winp.ws_col = atoi(optarg);
+                break;
+            case 'e':
+                hasEnv = true;
+                env.push_back(strdup(optarg));
                 break;
             case 'h':
                 usage(argv[0]);
@@ -281,6 +286,12 @@ int main(int argc, char *argv[])
     }
     else if (child == 0) /* child or slave */
     {
+        if (hasEnv)
+        {
+            for (char *const &setting : env)
+                putenv(setting);
+        }
+
         /* Changed directory should affect in child process */
         if (!workDir.empty())
         {
