@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "Helpers.hpp"
+#include "Environment.hpp"
 #include "SocketIo.hpp"
 #include "LocalSock.hpp"
 #include "TerminalState.hpp"
@@ -228,79 +229,6 @@ static void usage(const char *prog)
     "  -W, --wsldir  Folder\n"
     "                Changes the working directory to Unix style path\n", prog);
     exit(0);
-}
-
-class Environment {
-public:
-    void set(const std::string &var) {
-        const char *value = getenv(var.c_str());
-        if (value != nullptr) {
-            set(var, value);
-        }
-    }
-
-    void set(const std::string &var, const std::string &value) {
-        pairs_.push_back(std::make_pair(mbsToWcs(var), mbsToWcs(value)));
-    }
-
-    bool hasVar(const std::wstring &var) {
-        for (const auto &pair : pairs_) {
-            if (pair.first == var) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    const std::vector<std::pair<std::wstring, std::wstring>> &pairs() { return pairs_; }
-
-private:
-    std::vector<std::pair<std::wstring, std::wstring>> pairs_;
-};
-
-static std::string errorMessageToString(DWORD err) {
-    // Use FormatMessageW rather than FormatMessageA, because we want to use
-    // wcstombs to convert to the Cygwin locale, which might not match the
-    // codepage FormatMessageA would use.  We need to convert using wcstombs,
-    // rather than print using %ls, because %ls doesn't work in the original
-    // MSYS.
-    wchar_t *wideMsgPtr = NULL;
-    const DWORD formatRet = FormatMessageW(
-        FORMAT_MESSAGE_FROM_SYSTEM |
-            FORMAT_MESSAGE_ALLOCATE_BUFFER |
-            FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        err,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        reinterpret_cast<wchar_t*>(&wideMsgPtr),
-        0,
-        NULL);
-    if (formatRet == 0 || wideMsgPtr == NULL) {
-        return std::string();
-    }
-    std::string msg = wcsToMbs(wideMsgPtr);
-    LocalFree(wideMsgPtr);
-    const size_t pos = msg.find_last_not_of(" \r\n\t");
-    if (pos == std::string::npos) {
-        msg.clear();
-    } else {
-        msg.erase(pos + 1);
-    }
-    return msg;
-}
-
-static std::string formatErrorMessage(DWORD err) {
-    char buf[64];
-    sprintf(buf, "error %#x", static_cast<unsigned int>(err));
-    std::string ret = errorMessageToString(err);
-    if (ret.empty()) {
-        ret += buf;
-    } else {
-        ret += " (";
-        ret += buf;
-        ret += ")";
-    }
-    return ret;
 }
 
 struct PipeHandles {
@@ -524,12 +452,14 @@ int main(int argc, char *argv[])
             case 0:
                 /* Ignore long option. */
                 break;
-            case 'e': {
+            case 'e':
+            {
                 const char *eq = strchr(optarg, '=');
-                const std::string varname = eq ? std::string(optarg, eq - optarg)
+                const std::string varname = eq ?
+                                            std::string(optarg, eq - optarg)
                                             : std::string(optarg);
                 if (varname.empty())
-                    fatal("error: -e variable name cannot be empty: '%s'\n", optarg);
+                    invalid_arg("environment");
 
                 if (eq)
                     env.set(varname, eq + 1);
@@ -683,17 +613,15 @@ int main(int argc, char *argv[])
     assert(iRet > 0);
     wslCmdLine.append(buffer.data());
 
-    if (loginMode == LoginMode::Yes) {
+    if (loginMode == LoginMode::Yes)
         appendWslArg(wslCmdLine, L"-l");
-    }
-    for (const auto &envPair : env.pairs()) {
+
+    for (const auto &envPair : env.pairs())
         appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
-    }
 
     appendWslArg(wslCmdLine, L"--");
-    for (int i = optind; i < argc; ++i) {
+    for (int i = optind; i < argc; ++i)
         appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
-    }
 
     std::wstring cmdLine;
     cmdLine.append(L"\"");
@@ -708,8 +636,9 @@ int main(int argc, char *argv[])
    /* Taken from HKCU\Directory\Background\shell\WSL\command */
     if (!winDir.empty())
     {
-        cmdLine.append(L" --cd ");
+        cmdLine.append(L" --cd \"");
         cmdLine.append(mbsToWcs(winDir));
+        cmdLine.append(L"\"");
     }
 
     if (!userName.empty())

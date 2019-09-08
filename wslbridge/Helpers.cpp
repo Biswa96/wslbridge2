@@ -292,3 +292,55 @@ void appendWslArg(std::wstring &out, const std::wstring &arg)
     }
     enterQuote(false);
 }
+
+std::string errorMessageToString(DWORD err)
+{
+    /*
+     *Use FormatMessageW rather than FormatMessageA, because we want to use
+     * wcstombs to convert to the Cygwin locale, which might not match the
+     * codepage FormatMessageA would use.  We need to convert using wcstombs,
+     * rather than print using %ls, because %ls doesn't work in the original
+     * MSYS.
+     */
+    wchar_t *wideMsgPtr = NULL;
+    const DWORD formatRet = FormatMessageW(
+                FORMAT_MESSAGE_FROM_SYSTEM |
+                FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                FORMAT_MESSAGE_IGNORE_INSERTS,
+                NULL,
+                err,
+                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                reinterpret_cast<wchar_t*>(&wideMsgPtr),
+                0,
+                NULL);
+    if (formatRet == 0 || wideMsgPtr == NULL)
+        return std::string();
+
+    std::string msg = wcsToMbs(wideMsgPtr);
+    LocalFree(wideMsgPtr);
+    const size_t pos = msg.find_last_not_of(" \r\n\t");
+    if (pos == std::string::npos)
+        msg.clear();
+    else
+        msg.erase(pos + 1);
+
+    return msg;
+}
+
+std::string formatErrorMessage(DWORD err)
+{
+    char buf[64];
+    sprintf(buf, "error %#x", static_cast<unsigned int>(err));
+    std::string ret = errorMessageToString(err);
+    if (ret.empty())
+    {
+        ret += buf;
+    }
+    else
+    {
+        ret += " (";
+        ret += buf;
+        ret += ")";
+    }
+    return ret;
+}
