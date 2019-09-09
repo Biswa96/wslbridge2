@@ -114,7 +114,7 @@ std::wstring findSystemProgram(const wchar_t *name)
     const auto path = [&](const wchar_t *part) -> std::wstring {
         return std::wstring(windir.data()) + part + name;
     };
-
+#if defined(__x86_64__)
     const auto ret = path(kPart32);
     if (pathExists(ret))
     {
@@ -126,6 +126,22 @@ std::wstring findSystemProgram(const wchar_t *name)
               "note: Ubuntu-on-Windows must be installed\n",
               wcsToMbs(ret).c_str());
     }
+#elif defined(__i386__)
+    const wchar_t *const kPartNat = L"\\Sysnative\\";
+    const auto pathNat = path(kPartNat);
+    if (pathExists(pathNat)) {
+        return std::move(pathNat);
+    }
+    const auto path32 = path(kPart32);
+    if (pathExists(path32)) {
+        return std::move(path32);
+    }
+    fatal("error: neither '%s' nor '%s' exist\n"
+          "note: Ubuntu-on-Windows must be installed\n",
+          wcsToMbs(pathNat).c_str(), wcsToMbs(path32).c_str());
+#else
+    #error "Could not determine architecture"
+#endif
 }
 
 std::pair<std::wstring, std::wstring>
