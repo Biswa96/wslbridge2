@@ -7,7 +7,7 @@
 STRIP ?= strip
 NAME = wslbridge2.exe
 BINDIR = ../bin
-CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c++11 -Wall
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
 LFLAGS = -static-libgcc -static-libstdc++
 BINS = \
 $(BINDIR)/Helpers.obj \

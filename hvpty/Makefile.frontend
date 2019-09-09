@@ -7,7 +7,7 @@
 STRIP ?= strip
 NAME = hvpty.exe
 BINDIR = ../bin
-CFLAGS = -D_GNU_SOURCE -fno-exceptions -m64 -O2 -std=c++11 -Wall
+CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
 LFLAGS = -pthread -static -static-libgcc -static-libstdc++
 LIBS = -lws2_32 -lole32
 BINS = \

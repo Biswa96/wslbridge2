@@ -6,8 +6,37 @@
 
 #include <winsock2.h>
 #include <windows.h>
+#include <winternl.h>
 #include <assert.h>
 #include <string>
+
+struct RTL_USER_PROCESS_PARAMETERS_mod
+{
+    ULONG MaximumLength;
+    ULONG Length;
+    ULONG Flags;
+    ULONG DebugFlags;
+    HANDLE ConsoleHandle;
+    /* Removed unused members */
+};
+
+struct PEB_mod
+{
+    BYTE Reserved1[2];
+    BYTE BeingDebugged;
+    BYTE Reserved2[1];
+    PVOID Reserved3[2];
+    PPEB_LDR_DATA Ldr;
+    struct RTL_USER_PROCESS_PARAMETERS_mod *ProcessParameters;
+    /* Removed unused members */
+};
+
+struct TEB_mod
+{
+    PVOID Reserved1[12];
+    struct PEB_mod *ProcessEnvironmentBlock;
+    /* Removed unused members */
+};
 
 static const GUID CLSID_LxssUserSession = {
     0x4F476546,
@@ -21,12 +50,14 @@ static const GUID IID_ILxssUserSession = {
     0x41D9,
     { 0xB9, 0x78, 0xDC, 0xAC, 0xA9, 0xA9, 0xB5, 0xB9 } };
 
-typedef struct _LXSS_STD_HANDLE {
+typedef struct _LXSS_STD_HANDLE
+{
     ULONG Handle;
     ULONG Pipe;
 } LXSS_STD_HANDLE, *PLXSS_STD_HANDLE;
 
-typedef struct _LXSS_STD_HANDLES {
+typedef struct _LXSS_STD_HANDLES
+{
     LXSS_STD_HANDLE StdIn;
     LXSS_STD_HANDLE StdOut;
     LXSS_STD_HANDLE StdErr;
@@ -128,17 +159,10 @@ void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName)
         HANDLE ConsoleHandle, LxProcessHandle, ServerHandle;
         SOCKET SockIn, SockOut, SockErr, ServerSocket;
 
-       /*
-        * Alternative of NtCurrentTeb with __readgsqword
-        * TEB->PEB->ProcessParameters->ConsoleHandle
-        */
-        __asm__ (
-        "movq %%gs:0x30, %%rax \n\t"
-        "movq 0x60(%%rax), %%rax \n\t"
-        "movq 0x20(%%rax), %%rax \n\t"
-        "movq 0x10(%%rax), %%rax \n\t"
-        "movq %%rax, %0"
-        : "=r" (ConsoleHandle));
+        /* Black magic due to absence of appropriate header */
+        auto teb = (struct TEB_mod *)NtCurrentTeb();
+        ConsoleHandle = teb->ProcessEnvironmentBlock->
+                        ProcessParameters->ConsoleHandle;
 
         hRes = wslSession->CreateLxProcess(
             &DistroId,
