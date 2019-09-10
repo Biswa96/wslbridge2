@@ -67,27 +67,27 @@ typedef struct _LXSS_STD_HANDLES
 class ILxssUserSession : public IUnknown
 {
 public:
-    virtual HRESULT CreateInstance(void) = 0;
-    virtual HRESULT RegisterDistribution(void) = 0;
-    virtual HRESULT RegisterDistributionFromPipe(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateInstance(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE RegisterDistribution(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE RegisterDistributionFromPipe(void) = 0;
 
-    virtual HRESULT GetDistributionId(
+    virtual HRESULT STDMETHODCALLTYPE GetDistributionId(
         /*_In_*/ PCWSTR DistroName,
         /*_In_*/ ULONG EnableEnumerate,
         /*_Out_*/ GUID *DistroId) = 0;
 
-    virtual HRESULT TerminateDistribution(void) = 0;
-    virtual HRESULT UnregisterDistribution(void) = 0;
-    virtual HRESULT ConfigureDistribution(void) = 0;
-    virtual HRESULT GetDistributionConfiguration(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TerminateDistribution(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE UnregisterDistribution(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ConfigureDistribution(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetDistributionConfiguration(void) = 0;
 
-    virtual HRESULT GetDefaultDistribution(
+    virtual HRESULT STDMETHODCALLTYPE GetDefaultDistribution(
         /*_Out_*/ GUID *DistroId) = 0;
 
-    virtual HRESULT SetDefaultDistribution(void) = 0;
-    virtual HRESULT EnumerateDistributions(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDefaultDistribution(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnumerateDistributions(void) = 0;
 
-    virtual HRESULT CreateLxProcess(
+    virtual HRESULT STDMETHODCALLTYPE CreateLxProcess(
         /*_In_opt_*/ GUID *DistroId,
         /*_In_opt_*/ PCSTR CommandLine,
         /*_In_opt_*/ ULONG ArgumentCount,
@@ -110,14 +110,17 @@ public:
         /*_Out_*/ SOCKET *ErrorSocket,
         /*_Out_*/ SOCKET *ControlSocket) = 0;
 
-    virtual HRESULT SetVersion(void) = 0;
-    virtual HRESULT RegisterLxBusServer(void) = 0;
-    virtual HRESULT ExportDistribution(void) = 0;
-    virtual HRESULT ExportDistributionFromPipe(void) = 0;
-    virtual HRESULT Shutdown(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetVersion(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE RegisterLxBusServer(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ExportDistribution(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ExportDistributionFromPipe(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Shutdown(void) = 0;
 };
 
-void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName)
+void GetVmId(
+    GUID *LxInstanceID,
+    const std::wstring &DistroName,
+    int *WslVersion)
 {
     int bRes;
     HRESULT hRes;
@@ -179,6 +182,11 @@ void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName)
             &SockErr,
             &ServerSocket);
         assert(hRes == 0);
+
+        if (ServerHandle == nullptr && ServerSocket != 0)
+            *WslVersion = 2;
+        else
+            *WslVersion = 1;
     }
 
     /* cleanup */

@@ -39,7 +39,10 @@ static int random_port(void)
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
-void GetVmId(GUID *LxInstanceID, const std::wstring &DistroName);
+void GetVmId(
+    GUID *LxInstanceID,
+    const std::wstring &DistroName,
+    int *WslVersion);
 
 /* return accepted client socket to receive */
 static SOCKET Initialize(std::wstring &command, GUID *VmId)
@@ -423,7 +426,11 @@ int main(int argc, char *argv[])
 
     /* Create server to receive random port number */
     GUID VmId;
-    GetVmId(&VmId, mbsToWcs(distroName));
+    int WslVersion;
+    GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
+    if (WslVersion != 2)
+        fatal("This is for WSL2 distributions only\n");
+
     const SOCKET sClient = Initialize(cmdLine, &VmId);
 
     unsigned int randomPort = 0;
