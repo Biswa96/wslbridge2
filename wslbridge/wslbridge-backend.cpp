@@ -556,6 +556,7 @@ int main(int argc, char *argv[]) {
     }
     if (childParams.argv.empty()) {
         const char *shell = "/bin/sh";
+#ifdef use_getpwuid
         struct passwd *pw = getpwuid(getuid());
         if (pw == nullptr) {
             fatalPerror("error: getpwuid failed");
@@ -564,6 +565,10 @@ int main(int argc, char *argv[]) {
         } else {
             shell = pw->pw_shell;
         }
+#else
+        if (getenv("SHELL"))
+          shell = getenv("SHELL");
+#endif
         childParams.argv.push_back(strdup(shell));
     }
     // XXX: Replace char* args/envstrings with std::string?

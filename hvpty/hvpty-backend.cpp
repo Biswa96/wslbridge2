@@ -299,18 +299,26 @@ int main(int argc, char *argv[])
             assert(ret == 0);
         }
 
+        std::vector<char*> args;
+        const char *shell = "/bin/sh";
+
+#ifdef use_getpwuid
         struct passwd *pwd = getpwuid(getuid());
         assert(pwd != nullptr);
-        if (pwd->pw_shell == nullptr)
-            pwd->pw_shell = strdup("/bin/sh");
+        if (pwd->pw_shell != nullptr)
+            shell = pwd->pw_shell;
+#else
+        if (getenv("SHELL"))
+          shell = getenv("SHELL");
+#endif
 
-        std::vector<char*> args;
-        args.push_back(pwd->pw_shell);
+        args.push_back(strdup(shell));
+
         if (loginMode)
             args.push_back(strdup("-l"));
         args.push_back(nullptr);
 
-        ret = execvp(pwd->pw_shell, args.data());
+        ret = execvp(shell, args.data());
         assert(ret > 0);
     }
     else

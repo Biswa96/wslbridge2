@@ -8,7 +8,7 @@ STRIP ?= strip
 NAME = hvpty-backend
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
-LFLAGS = -lutil -static-libgcc -static-libstdc++
+LFLAGS = -lutil -static -static-libgcc -static-libstdc++
 BINS = \
 $(BINDIR)/hvpty-backend.o
 
