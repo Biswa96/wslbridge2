@@ -113,6 +113,14 @@ static void try_help(const char *prog)
     exit(1);
 }
 
+struct ChildParams
+{
+    std::vector<char*> env;
+    std::string prog;
+    std::vector<char*> argv;
+    std::string cwd;
+};
+
 int main(int argc, char *argv[])
 {
     if (argc < 2)
@@ -121,9 +129,8 @@ int main(int argc, char *argv[])
     int ret;
     struct winsize winp;
     unsigned int initPort = 0, randomPort = 0;
-    std::string workDir;
-    std::vector<char*> env;
-    bool hasEnv = false, loginMode = false;
+    struct ChildParams childParams;
+    bool loginMode = false;
     int c = 0;
 
     const char shortopts[] = "+c:e:hlp:P:r:";
@@ -141,31 +148,14 @@ int main(int argc, char *argv[])
     {
         switch (c)
         {
-            case 'c':
-                winp.ws_col = atoi(optarg);
-                break;
-            case 'e':
-                hasEnv = true;
-                env.push_back(strdup(optarg));
-                break;
-            case 'h':
-                usage(argv[0]);
-                break;
-            case 'l':
-                loginMode = true;
-                break;
-            case 'p':
-                initPort = atoi(optarg);
-                break;
-            case 'P':
-                workDir = optarg;
-                break;
-            case 'r':
-                winp.ws_row = atoi(optarg);
-                break;
-            default:
-                try_help(argv[0]);
-                break;
+            case 'c': winp.ws_col = atoi(optarg); break;
+            case 'e': childParams.env.push_back(strdup(optarg)); break;
+            case 'h': usage(argv[0]); break;
+            case 'l': loginMode = true; break;
+            case 'p': initPort = atoi(optarg); break;
+            case 'P': childParams.cwd = optarg; break;
+            case 'r': winp.ws_row = atoi(optarg); break;
+            default: try_help(argv[0]); break;
         }
     }
 
@@ -286,40 +276,51 @@ int main(int argc, char *argv[])
     }
     else if (child == 0) /* child or slave */
     {
-        if (hasEnv)
-        {
-            for (char *const &setting : env)
-                putenv(setting);
-        }
+        int res;
+
+        for (char *const &setting : childParams.env)
+            putenv(setting);
 
         /* Changed directory should affect in child process */
-        if (!workDir.empty())
+        if (!childParams.cwd.empty())
         {
-            ret = chdir(workDir.c_str());
-            assert(ret == 0);
+            res = chdir(childParams.cwd.c_str());
+            assert(res == 0);
         }
 
-        std::vector<char*> args;
-        const char *shell = "/bin/sh";
+        for (int i = optind; i < argc; ++i)
+            childParams.argv.push_back(argv[i]);
 
+        if (childParams.argv.empty())
+        {
+            const char *shell = "/bin/sh";
 #ifdef use_getpwuid
-        struct passwd *pwd = getpwuid(getuid());
-        assert(pwd != nullptr);
-        if (pwd->pw_shell != nullptr)
-            shell = pwd->pw_shell;
+            struct passwd *pw = getpwuid(getuid());
+            assert(pw != nullptr);
+            if (pw->pw_shell != nullptr)
+                shell = pw->pw_shell;
 #else
-        if (getenv("SHELL"))
-          shell = getenv("SHELL");
+            if (getenv("SHELL"))
+                shell = getenv("SHELL");
 #endif
+            childParams.argv.push_back(strdup(shell));
+        }
 
-        args.push_back(strdup(shell));
-
+        childParams.prog = childParams.argv[0];
         if (loginMode)
-            args.push_back(strdup("-l"));
-        args.push_back(nullptr);
+        {
+            std::string argv0 = childParams.argv[0];
+            const std::size_t pos = argv0.find_last_of('/');
+            if (pos != std::string::npos)
+                argv0 = argv0.substr(pos + 1);
 
-        ret = execvp(shell, args.data());
-        assert(ret > 0);
+            argv0 = '-' + argv0;
+            childParams.argv[0] = strdup(argv0.c_str());
+        }
+        childParams.argv.push_back(nullptr);
+
+        res = execvp(childParams.prog.c_str(), childParams.argv.data());
+        assert(res > 0);
     }
     else
         perror("fork");
@@ -327,4 +328,6 @@ int main(int argc, char *argv[])
     /* cleanup */
     for (int i = 0; i < 4; i++)
         close(ioSockets.sock[i]);
+
+    return 0;
 }

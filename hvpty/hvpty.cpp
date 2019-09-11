@@ -392,6 +392,10 @@ int main(int argc, char *argv[])
         wslCmdLine.append(L"\"");
     }
 
+    appendWslArg(wslCmdLine, L"--");
+    for (int i = optind; i < argc; i++)
+        appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
+
     /* Append wsl.exe options and its arguments */
     std::wstring cmdLine;
     cmdLine.append(L"\"");
