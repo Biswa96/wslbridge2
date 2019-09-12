@@ -16,15 +16,24 @@
 #include <string>
 #include "../wslbridge/TerminalState.hpp"
 
-/* VT modes strings in ConHost command options */
-#define VT_PARSE_IO_MODE_XTERM "xterm"
-#define VT_PARSE_IO_MODE_XTERM_ASCII "xterm-ascii"
-#define VT_PARSE_IO_MODE_XTERM_256COLOR "xterm-256color"
-#define VT_PARSE_IO_MODE_WIN_TELNET "win-telnet"
+#ifndef PointerToUInt
+#define PointerToUInt(x) (unsigned int)(unsigned long int)(x)
+#endif
 
 /* remove headless option to reveal ConHost window */
+#if defined(__x86_64__)
+
 #define CONHOST_COMMAND_FORMAT \
-"\\\\?\\%s\\System32\\conhost.exe --headless %s--width %hu --height %hu --signal 0x%x --vtmode %s --feature pty -- "
+"\\\\?\\%s\\System32\\conhost.exe --headless %s--width %hu --height %hu --signal 0x%x -- "
+
+#elif defined(__i386__)
+
+#define CONHOST_COMMAND_FORMAT \
+"\\\\?\\%s\\Sysnative\\conhost.exe --headless %s--width %hu --height %hu --signal 0x%x -- "
+
+#else
+#error "Could not determine architecture"
+#endif
 
 #define RESIZE_CONHOST_SIGNAL_FLAG 8
 
@@ -35,42 +44,14 @@ struct RESIZE_PSEUDO_CONSOLE_BUFFER
     unsigned short height;
 };
 
-class RawPty
+struct PipeHandles
 {
-public:
-    RawPty();
-    ~RawPty();
-    void CreateConHost(std::string program, bool usePty, bool followCur);
-
-private:
-    int mRes;
-    void *mhStdIn = nullptr;
-    void *mhStdOut = nullptr;
+    void *hRead;
+    void *hWrite;
 };
 
-RawPty::RawPty()
-{
-    mhStdIn = GetStdHandle(STD_INPUT_HANDLE);
-    mhStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    void *hProc = GetCurrentProcess();
-
-    mRes = DuplicateHandle(hProc, mhStdIn, hProc, &mhStdIn,
-                           0, TRUE, DUPLICATE_SAME_ACCESS);
-    assert(mRes != 0);
-
-    mRes = DuplicateHandle(hProc, mhStdOut, hProc, &mhStdOut,
-                           0, TRUE, DUPLICATE_SAME_ACCESS);
-    assert(mRes != 0);
-}
-
-RawPty::~RawPty()
-{
-    CloseHandle(mhStdIn);
-    CloseHandle(mhStdOut);
-}
-
 /* global variable */
-static void *hPipe[2];
+static struct PipeHandles pipeHandles;
 
 static void* resize_conpty(void *set)
 {
@@ -92,16 +73,30 @@ static void* resize_conpty(void *set)
             buf.width = winp.ws_col;
             buf.height = winp.ws_row;
             buf.flag = RESIZE_CONHOST_SIGNAL_FLAG;
-            if (!WriteFile(hPipe[1], &buf, sizeof buf, nullptr, nullptr))
+            ret = WriteFile(pipeHandles.hWrite, &buf, sizeof buf, NULL, NULL);
+            if (!ret)
                 break;
         }
     }
 
-    return nullptr;
+    return NULL;
 }
 
-void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
+static void RawPty(std::string program, bool usePty, bool followCur)
 {
+    int ret;
+    void *mhStdIn = GetStdHandle(STD_INPUT_HANDLE);
+    void *mhStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    void *hProc = GetCurrentProcess();
+
+    ret = DuplicateHandle(hProc, mhStdIn, hProc, &mhStdIn,
+                          0, TRUE, DUPLICATE_SAME_ACCESS);
+    assert(ret != 0);
+
+    ret = DuplicateHandle(hProc, mhStdOut, hProc, &mhStdOut,
+                          0, TRUE, DUPLICATE_SAME_ACCESS);
+    assert(ret != 0);
+
     COORD size = {};
     struct winsize winp;
 
@@ -120,33 +115,34 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     /* create Windows pipes for signaling ConHost */
     SECURITY_ATTRIBUTES pipeAttr = {};
     pipeAttr.nLength = sizeof pipeAttr;
-    pipeAttr.bInheritHandle = false;
-    mRes = CreatePipe(&hPipe[0], &hPipe[1], &pipeAttr, 0);
-    assert(mRes != 0);
+    pipeAttr.bInheritHandle = FALSE;
+    ret = CreatePipe(&pipeHandles.hRead, &pipeHandles.hWrite, &pipeAttr, 0);
+    assert(ret != 0);
 
-    mRes = SetHandleInformation(hPipe[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-    assert(mRes != 0);
+    ret = SetHandleInformation(pipeHandles.hRead,
+            HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    assert(ret != 0);
 
     /* create thread for resizing window with SIGWINCH signal */
     pthread_t tid;
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGWINCH);
-    mRes = pthread_sigmask(SIG_BLOCK, &set, nullptr);
-    assert(mRes == 0);
+    ret = pthread_sigmask(SIG_BLOCK, &set, NULL);
+    assert(ret == 0);
 
-    mRes = pthread_create(&tid, nullptr, resize_conpty, (void *)&set);
-    assert(mRes == 0);
+    ret = pthread_create(&tid, NULL, resize_conpty, (void *)&set);
+    assert(ret == 0);
 
     /* create ConHost command line */
     unsigned int nSize;
-    nSize = ExpandEnvironmentStringsA("%SystemRoot%", nullptr, 0);
+    nSize = ExpandEnvironmentStringsA("%SystemRoot%", NULL, 0);
     char *sysRoot = (char *)HeapAlloc(GetProcessHeap(), 0, nSize * sizeof(char));
     nSize = ExpandEnvironmentStringsA("%SystemRoot%", sysRoot, nSize);
     assert(nSize > 0);
 
     char dest[512];
-    mRes = snprintf(
+    ret = snprintf(
         dest,
         512,
         CONHOST_COMMAND_FORMAT,
@@ -154,9 +150,8 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
         followCur ? "--inheritcursor " : "",
         size.X,
         size.Y,
-        HandleToUlong(hPipe[0]),
-        VT_PARSE_IO_MODE_XTERM_256COLOR);
-    assert(mRes > 0);
+        PointerToUInt(pipeHandles.hRead));
+    assert(ret > 0);
 
     HeapFree(GetProcessHeap(), 0, sysRoot);
 
@@ -171,21 +166,23 @@ void RawPty::CreateConHost(std::string program, bool usePty, bool followCur)
     si.hStdOutput = mhStdOut;
     si.hStdError = mhStdOut;
 
-    mRes = CreateProcessA(NULL, &command[0], NULL, NULL,
-                          true, 0, NULL, NULL, &si, &pi);
-    assert(mRes != 0);
+    ret = CreateProcessA(NULL, &command[0], NULL, NULL,
+                         true, 0, NULL, NULL, &si, &pi);
+    assert(ret != 0);
 
     /* wait for ConHost to complete */
-    if (mRes)
+    if (ret)
         WaitForSingleObject(pi.hProcess, INFINITE);
     else
-        printf("CreateProcess error: %d\n", GetLastError());
+        printf("CreateProcess error: %d\n", (int)GetLastError());
 
     /* cleanup */
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
-    CloseHandle(hPipe[0]);
-    CloseHandle(hPipe[1]);
+    CloseHandle(pipeHandles.hRead);
+    CloseHandle(pipeHandles.hWrite);
+    CloseHandle(mhStdIn);
+    CloseHandle(mhStdOut);
     if (usePty)
         termState.exitCleanly(0);
 }
@@ -216,8 +213,7 @@ int main(int argc, char *argv[])
         program.append(" ");
     }
 
-    RawPty rawPty;
-    rawPty.CreateConHost(program, true, true);
+    RawPty(program, true, true);
 
     return 0;
 }
