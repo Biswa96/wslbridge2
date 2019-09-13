@@ -13,11 +13,20 @@
 
 Explore various ways to connect WSL with Windows terminal emulators.
 
+## Requirements:
+
+* A POSIX-compatible environment - cygwin or msys2
+* A terminal emulator - mintty or ConEmu
+* For compiling - GCC, make, linux-headers
+
+
 ## How to build
 
 Clone this git repository. Run `make` in cygwin and WSL to make all binaries.
-To build individual programs, go to that corresponding folder and run `make`.
-All binaries will be saved in `bin` folder.
+To build individual programs, go to that corresponding folder and run `make`
+command with the corresponding Makefile. By default `make` command will create
+dynamically linked executables. For static liked binaries use `make RELEASE=1`
+command. All binaries will be saved in `bin` folder.
 
 
 ## How to use
@@ -28,16 +37,12 @@ nightly builds, go to [Appveyor project] and download the 7zip artifact.
 [Release page]: https://github.com/Biswa96/wslbridge2/releases
 [Appveyor project]: https://ci.appveyor.com/project/Biswa96/wslbridge2
 
-### Requirements:
-
-* A POSIX-compatible environment - cygwin or msys2
-* A terminal emulator - mintty or ConEmu
 
 ### hvpty: connect WSL2 with AF_HYPERV sockets
 
 Place `hvpty.exe` and `hvpty-backend` in same Windows folder. Run `hvpty.exe`.
 
-### hvsocket: Sample C code using Hyper-V sockets
+### hvsocket: sample C code using Hyper-V sockets
 
 Pick up any one of 1. `win_client` & `wsl_server` 2. `win_server` & `wsl_client`.
 Run `wsl.exe` first. Paste the VM ID from the last argument of `wslhost.exe`
@@ -62,7 +67,7 @@ between Windows and WSL side programs.
 
 * There is no documented way to get VM ID from WSL2 Linux VM. See this
 [issue](https://github.com/microsoft/WSL/issues/4131). Hence `hvpty` may change
-according to future Windows 10 releases.
+in future Windows 10 releases due to usage of undocumented COM methods.
 
 
 ## Further Readings
@@ -80,7 +85,8 @@ according to future Windows 10 releases.
 
 Contributions are greatly appreciated. Please keep these following points:
 
-* Try contact me or add an issue before creating a pull request.
+* For a big change, add an issue before creating a pull request.
+* Append a tag name in pull request message, see previous commits.
 * Make the code easy to read and understand.
 * Use 4 spaces for indentation.
 * If you are not programmer you can also contribute to update documentations.
