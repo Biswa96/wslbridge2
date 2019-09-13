@@ -8,7 +8,12 @@ STRIP ?= strip
 NAME = wslbridge2.exe
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
-LFLAGS = -static-libgcc -static-libstdc++
+LFLAGS = 
+
+ifdef RELEASE
+LFLAGS += -static -static-libgcc -static-libstdc++
+endif
+
 BINS = \
 $(BINDIR)/Helpers.obj \
 $(BINDIR)/LocalSock.obj \

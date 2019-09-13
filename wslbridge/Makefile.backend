@@ -8,7 +8,12 @@ STRIP ?= strip
 NAME = wslbridge2-backend
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
-LFLAGS = -lutil -pthread -static -static-libgcc -static-libstdc++
+LFLAGS = -lutil -pthread
+
+ifdef RELEASE
+LFLAGS += -static -static-libgcc -static-libstdc++
+endif
+
 BINS = \
 $(BINDIR)/wslbridge-backend.o \
 $(BINDIR)/SocketIo.o

@@ -8,7 +8,12 @@ STRIP ?= strip
 NAME = rawpty.exe
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
-LFLAGS = -pthread -static -static-libgcc -static-libstdc++
+LFLAGS = -pthread
+
+ifdef RELEASE
+LFLAGS += -static -static-libgcc -static-libstdc++
+endif
+
 BINS = \
 $(BINDIR)/rawpty.obj \
 $(BINDIR)/SocketIo.obj \
