@@ -70,7 +70,6 @@ static std::string resolveCwd(const std::string &cwd) {
 }
 
 struct ChildParams {
-    bool usePty = false;
     int cols = -1;
     int rows = -1;
     std::vector<char*> env;
@@ -85,7 +84,6 @@ struct Child {
     int masterFd = -1;
     int inputFd = -1;
     int outputFd = -1;
-    int errorFd = -1;
 };
 
 class UniqueFd {
@@ -121,12 +119,6 @@ struct PipePair {
     UniqueFd write;
 };
 
-struct ProcessPipes {
-    UniqueFd inputPipe;
-    UniqueFd outputPipe;
-    UniqueFd errorPipe;
-};
-
 static PipePair makePipePair(int oflags) {
     int vals[2];
     if (pipe2(vals, oflags) != 0) {
@@ -138,31 +130,6 @@ static PipePair makePipePair(int oflags) {
     };
 }
 
-static pid_t forkPipes(ProcessPipes &out) {
-    auto inputPipe = makePipePair(0);
-    auto outputPipe = makePipePair(0);
-    auto errorPipe = makePipePair(0);
-    const pid_t child = fork();
-    if (child == static_cast<pid_t>(-1)) {
-        // Do nothing.
-    } else if (child == 0) {
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
-        dup2(inputPipe.read.fd(), STDIN_FILENO);
-        dup2(outputPipe.write.fd(), STDOUT_FILENO);
-        dup2(errorPipe.write.fd(), STDERR_FILENO);
-    } else {
-        inputPipe.read.close();
-        outputPipe.write.close();
-        errorPipe.write.close();
-        out.inputPipe = std::move(inputPipe.write);
-        out.outputPipe = std::move(outputPipe.read);
-        out.errorPipe = std::move(errorPipe.read);
-    }
-    return child;
-}
-
 static Child spawnChild(const ChildParams &params) {
     assert(params.argv.size() >= 2);
     assert(params.argv.back() == nullptr);
@@ -172,13 +139,9 @@ static Child spawnChild(const ChildParams &params) {
     ws.ws_row = params.rows;
 
     PipePair spawnErrPipe = makePipePair(O_CLOEXEC);
-    ProcessPipes processPipes;
 
     int masterFdRaw = -1;
-    const pid_t pid =
-        params.usePty
-            ? forkpty(&masterFdRaw, nullptr, nullptr, &ws)
-            : forkPipes(processPipes);
+    const pid_t pid = forkpty(&masterFdRaw, nullptr, nullptr, &ws);
     if (pid == static_cast<pid_t>(-1)) {
         // forkpty failed
         const SpawnError err = {
@@ -230,15 +193,9 @@ static Child spawnChild(const ChildParams &params) {
     ret.spawnError = SpawnError { SpawnError::Type::Success, bridgedError(0) };
     ret.pid = pid;
     ret.masterFd = masterFd.release();
-    if (params.usePty) {
-        ret.inputFd = ret.masterFd;
-        ret.outputFd = ret.masterFd;
-        ret.errorFd = -1;
-    } else {
-        ret.inputFd = processPipes.inputPipe.release();
-        ret.outputFd = processPipes.outputPipe.release();
-        ret.errorFd = processPipes.errorPipe.release();
-    }
+    ret.inputFd = ret.masterFd;
+    ret.outputFd = ret.masterFd;
+
     return ret;
 }
 
@@ -249,7 +206,6 @@ struct ChannelWindow {
 };
 
 struct IoLoop {
-    bool usePty = false;
     int controlSocketFd = -1;
     int childFd = -1;
     WindowParams windowParams = {};
@@ -297,14 +253,6 @@ static void socketToChildThread(IoLoop *ioloop, int socketFd, int outputFd) {
         if (!writeAllRestarting(outputFd, buf.data(), amt1)) {
             break;
         }
-    }
-    // If we're using pipes and the frontend hits EOF on stdin, then we must
-    // close our write-end stdin child pipe to propagate EOF.  ssh doesn't seem
-    // to ever propagate EOF from the child up to the parent, so this code also
-    // doesn't propagate EOF from the backend to the frontend (i.e. we don't
-    // close a socket because child pipe I/O failed).
-    if (!ioloop->usePty) {
-        revokeFd(outputFd);
     }
     revokeFd(socketFd);
 }
@@ -382,7 +330,6 @@ static void handlePacket(IoLoop *ioloop, const Packet &p) {
             // to kill the thread, because it could be blocked waiting for
             // bytes in its window.  It *is* sufficient to close the read-end
             // of the child stdout pipe and kill any in-progress syscall.
-            assert(!ioloop->usePty);
             revokeFd(ioloop->stdoutAutoClose.pipeFd);
             revokeFd(ioloop->stdoutAutoClose.socketFd);
             pthread_kill(ioloop->stdoutAutoClose.thread, SIGUSR1);
@@ -395,12 +342,11 @@ static void handlePacket(IoLoop *ioloop, const Packet &p) {
     }
 }
 
-static void mainLoop(bool usePty, int controlSocketFd,
-                     int inputSocketFd, int outputSocketFd, int errorSocketFd,
+static void mainLoop(int controlSocketFd,
+                     int inputSocketFd, int outputSocketFd,
                      const char *exe, Child child, WindowParams windowParams) {
     if (child.spawnError.type == SpawnError::Type::Success) {
         IoLoop ioloop;
-        ioloop.usePty = usePty;
         ioloop.controlSocketFd = controlSocketFd;
         ioloop.childFd = child.masterFd;
         ioloop.windowParams = windowParams;
@@ -408,12 +354,6 @@ static void mainLoop(bool usePty, int controlSocketFd,
         std::thread s2c(socketToChildThread, &ioloop, inputSocketFd, child.inputFd);
         std::thread c2s(childToSocketThread, &ioloop, false,
                         child.outputFd, outputSocketFd);
-        std::unique_ptr<std::thread> ec2s;
-        if (errorSocketFd != -1) {
-            ec2s = std::unique_ptr<std::thread>(
-                new std::thread(childToSocketThread, &ioloop, true,
-                                child.errorFd, errorSocketFd));
-        }
 
         // handlePacket needs stdoutThread so it can propagate stdout closing
         // from the frontend to the child's stdout pipe.
@@ -442,16 +382,6 @@ static void mainLoop(bool usePty, int controlSocketFd,
         p.u.exitStatus = exitStatus;
         writePacket(controlSocketFd, p);
 
-        // If we're using pipes, then close the write-end of the child stdin
-        // pipe and the read-end of the stderr pipe.  This seems to be what ssh
-        // does.
-        if (!ioloop.usePty) {
-            revokeFd(child.inputFd);
-            pthread_kill(s2c.native_handle(), SIGUSR1);
-            revokeFd(child.errorFd);
-            pthread_kill(ec2s->native_handle(), SIGUSR1);
-        }
-
         // Ensure that the parent thread outlives its child threads.  The program
         // should exit before all the worker threads finish.  Join rcs first, so
         // that ioloop.stdoutThread remains valid if handlePacket is called.
@@ -461,7 +391,6 @@ static void mainLoop(bool usePty, int controlSocketFd,
         rcs.join();
         s2c.join();
         c2s.join();
-        if (ec2s) { ec2s->join(); }
     } else {
         PacketSpawnFailed p = {};
         p.size = sizeof(p);
@@ -510,16 +439,12 @@ int main(int argc, char *argv[]) {
     int controlSocketPort = -1;
     int inputSocketPort = -1;
     int outputSocketPort = -1;
-    int errorSocketPort = -1;
     int windowSize = -1;
     int windowThreshold = -1;
     ChildParams childParams;
-    int ptyMode = -1;
     bool loginMode = false;
 
     const struct option kOptionTable[] = {
-        { "pty",            false, &ptyMode,    1 },
-        { "pipes",          false, &ptyMode,    0 },
         // This debugging option is handled earlier.  Include it in this table
         // just to discard it.
         { "debug-fork",     false, nullptr,     0 },
@@ -527,7 +452,7 @@ int main(int argc, char *argv[]) {
     };
 
     int ch = 0;
-    while ((ch = getopt_long(argc, argv, "+3:0:1:2:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1)
+    while ((ch = getopt_long(argc, argv, "+3:0:1:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1)
     {
         switch (ch)
         {
@@ -538,7 +463,6 @@ int main(int argc, char *argv[]) {
             case '3': controlSocketPort = atoi(optarg); break;
             case '0': inputSocketPort = atoi(optarg); break;
             case '1': outputSocketPort = atoi(optarg); break;
-            case '2': errorSocketPort = atoi(optarg); break;
             case 'c': childParams.cols = atoi(optarg); break;
             case 'r': childParams.rows = atoi(optarg); break;
             case 'w': windowSize = atoi(optarg); break;
@@ -584,25 +508,6 @@ int main(int argc, char *argv[]) {
     }
     childParams.argv.push_back(nullptr);
 
-    optionRequired("--pty/--pipes", ptyMode, -1);
-    optionRequired("-3", controlSocketPort, -1);
-    optionRequired("-0", inputSocketPort, -1);
-    optionRequired("-1", outputSocketPort, -1);
-
-    if (ptyMode) {
-        optionRequired("-c", childParams.cols, -1);
-        optionRequired("-r", childParams.rows, -1);
-        optionNotAllowed("-2", " with --pty", errorSocketPort, -1);
-    } else {
-        optionNotAllowed("-c", " with --pipes", childParams.cols, -1);
-        optionNotAllowed("-r", " with --pipes", childParams.rows, -1);
-        optionRequired("-2", errorSocketPort, -1);
-    }
-    optionRequired("-w", windowSize, -1);
-    optionRequired("-t", windowThreshold, -1);
-
-    childParams.usePty = ptyMode;
-
     const WindowParams windowParams = { windowSize, windowThreshold };
     assert(windowParams.size >= 1);
     assert(windowParams.threshold >= 1);
@@ -611,7 +516,6 @@ int main(int argc, char *argv[]) {
     const int controlSocket = connectSocket(controlSocketPort);
     const int inputSocket = connectSocket(inputSocketPort);
     const int outputSocket = connectSocket(outputSocketPort);
-    const int errorSocket = ptyMode ? -1 : connectSocket(errorSocketPort);
 
     const auto child = spawnChild(childParams);
 
@@ -628,8 +532,8 @@ int main(int argc, char *argv[]) {
     sa.sa_handler = [](int signo) {};
     sigaction(SIGUSR1, &sa, nullptr);
 
-    mainLoop(childParams.usePty, controlSocket,
-             inputSocket, outputSocket, errorSocket,
+    mainLoop(controlSocket,
+             inputSocket, outputSocket,
              childParams.prog.c_str(), child, windowParams);
 
     return 0;

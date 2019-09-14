@@ -50,7 +50,6 @@ static TerminalState g_terminalState;
 
 struct IoLoop {
     std::string spawnCwd;
-    bool usePty = false;
     std::mutex mutex;
     bool ioFinished = false;
     int controlSocketFd = -1;
@@ -102,7 +101,7 @@ static void socketToParentThread(IoLoop *ioloop, bool isErrorPipe, int socketFd,
             break;
         }
         if (!writeAllRestarting(outFd, buf.data(), amt1)) {
-            if (!ioloop->usePty && !isErrorPipe) {
+            if (!isErrorPipe) {
                 // ssh seems to propagate an stdout EOF backwards to the remote
                 // program, so do the same thing.  It doesn't do this for
                 // stderr, though, where the remote process is allowed to block
@@ -161,20 +160,14 @@ static void handlePacket(IoLoop *ioloop, const Packet &p) {
 }
 
 static void mainLoop(const std::string &spawnCwd,
-                     bool usePty, int controlSocketFd,
-                     int inputSocketFd, int outputSocketFd, int errorSocketFd,
+                     int controlSocketFd,
+                     int inputSocketFd, int outputSocketFd,
                      TermSize termSize) {
     IoLoop ioloop;
     ioloop.spawnCwd = spawnCwd;
-    ioloop.usePty = usePty;
     ioloop.controlSocketFd = controlSocketFd;
     std::thread p2s(parentToSocketThread, inputSocketFd);
     std::thread s2p(socketToParentThread, &ioloop, false, outputSocketFd, STDOUT_FILENO);
-    std::unique_ptr<std::thread> es2p;
-    if (errorSocketFd != -1) {
-        es2p = std::unique_ptr<std::thread>(
-            new std::thread(socketToParentThread, &ioloop, true, errorSocketFd, STDERR_FILENO));
-    }
     std::thread rcs(readControlSocketThread<IoLoop, handlePacket, fatalConnectionBroken>,
                     controlSocketFd, &ioloop);
     int32_t exitStatus = -1;
@@ -219,9 +212,6 @@ static void usage(const char *prog)
     "  -h, --help    Show this usage information\n"
     "  -l            Start a login shell.\n"
     "  --no-login    Do not start a login shell.\n"
-    "  -T            Do not use a pty.\n"
-    "  -t            Use a pty (as long as stdin is a tty).\n"
-    "  -t -t         Force a pty (even if stdin is not a tty).\n"
     "  -u, --user    WSL User Name\n"
     "                Run as the specified user\n"
     "  -w, --windir  Folder\n"
@@ -423,7 +413,6 @@ int main(int argc, char *argv[])
     std::string winDir;
     std::string wslDir;
     std::string userName;
-    enum class TtyRequest { Auto, Yes, No, Force } ttyRequest = TtyRequest::Auto;
     enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
 
     int debugFork = 0;
@@ -432,7 +421,7 @@ int main(int argc, char *argv[])
         loginMode = LoginMode::Yes;
     }
 
-    const char shortopts[] = "+b:d:e:hlLtTu:w:W:";
+    const char shortopts[] = "+b:d:e:hlLu:w:W:";
     const struct option longopts[] = {
         { "backend",        required_argument,  nullptr,     'b' },
         { "distribution",   required_argument,  nullptr,     'd' },
@@ -470,16 +459,6 @@ int main(int argc, char *argv[])
 
             case 'h':
                 usage(argv[0]);
-                break;
-            case 't':
-                if (ttyRequest == TtyRequest::Yes) {
-                    ttyRequest = TtyRequest::Force;
-                } else {
-                    ttyRequest = TtyRequest::Yes;
-                }
-                break;
-            case 'T':
-                ttyRequest = TtyRequest::No;
                 break;
             case 'd':
                 distroName = optarg;
@@ -527,24 +506,6 @@ int main(int argc, char *argv[])
         loginMode = hasCommand ? LoginMode::No : LoginMode::Yes;
     }
     */
-    if (ttyRequest == TtyRequest::Auto) {
-        ttyRequest = loginMode == LoginMode::No ? TtyRequest::No : TtyRequest::Yes;
-    }
-    if (ttyRequest == TtyRequest::Yes && !isatty(STDIN_FILENO)) {
-        fprintf(stderr, "Pseudo-terminal will not be allocated because stdin is not a terminal.\n");
-        ttyRequest = TtyRequest::No;
-    }
-    const bool usePty = ttyRequest != TtyRequest::No;
-
-    if (!env.hasVar(L"TERM")) {
-        // This seems to be what OpenSSH is doing.
-        if (usePty) {
-            const char *termVal = getenv("TERM");
-            env.set("TERM", termVal && *termVal ? termVal : "dumb");
-        } else {
-            env.set("TERM", "dumb");
-        }
-    }
 
     // We must register this handler *before* determining the initial terminal
     // size.
@@ -559,10 +520,6 @@ int main(int argc, char *argv[])
     LocalSock controlSocket;
     LocalSock inputSocket;
     LocalSock outputSocket;
-    std::unique_ptr<LocalSock> errorSocket;
-    if (!usePty) {
-        errorSocket = std::unique_ptr<LocalSock>(new LocalSock);
-    }
 
     const std::wstring wslPath = findSystemProgram(L"wsl.exe");
     const auto backendPathInfo = normalizePath(
@@ -588,28 +545,14 @@ int main(int argc, char *argv[])
 
     std::array<wchar_t, 1024> buffer;
     int iRet = swprintf(buffer.data(), buffer.size(),
-                        L" -3%d -0%d -1%d -w%d -t%d",
+                        L" -3%d -0%d -1%d -c%d -r%d -w%d -t%d",
                         controlSocket.port(),
                         inputSocket.port(),
                         outputSocket.port(),
+                        initialSize.cols,
+                        initialSize.rows,
                         kOutputWindowSize,
                         kOutputWindowSize / 4);
-    assert(iRet > 0);
-    wslCmdLine.append(buffer.data());
-
-    if (usePty)
-    {
-        iRet = swprintf(buffer.data(), buffer.size(),
-                        L" --pty -c%d -r%d",
-                        initialSize.cols,
-                        initialSize.rows);
-    }
-    else
-    {
-        iRet = swprintf(buffer.data(), buffer.size(),
-                        L" --pipes -2%d",
-                        errorSocket->port());
-    }
     assert(iRet > 0);
     wslCmdLine.append(buffer.data());
 
@@ -730,21 +673,15 @@ int main(int argc, char *argv[])
     const int controlSocketC = controlSocket.accept();
     const int inputSocketC = inputSocket.accept();
     const int outputSocketC = outputSocket.accept();
-    const int errorSocketC = !errorSocket ? -1 : (*errorSocket).accept();
     controlSocket.close();
     inputSocket.close();
     outputSocket.close();
-    if (errorSocket) { errorSocket->close(); }
 
-    if (usePty) {
-        g_terminalState.enterRawMode();
-    }
+    g_terminalState.enterRawMode();
+
 
     backendStarted = true;
 
-    mainLoop(winDir,
-             usePty, controlSocketC,
-             inputSocketC, outputSocketC, errorSocketC,
-             initialSize);
+    mainLoop(winDir, controlSocketC, inputSocketC, outputSocketC, initialSize);
     return 0;
 }
