@@ -237,136 +237,6 @@ static struct PipeHandles createPipe()
     return ret;
 }
 
-class StartupInfoAttributeList {
-public:
-    StartupInfoAttributeList(PPROC_THREAD_ATTRIBUTE_LIST &attrList, int count) {
-        SIZE_T size {};
-        InitializeProcThreadAttributeList(nullptr, count, 0, &size);
-        assert(size > 0 && "InitializeProcThreadAttributeList failed");
-        buffer_ = std::unique_ptr<char[]>(new char[size]);
-        const BOOL success = InitializeProcThreadAttributeList(get(), count, 0, &size);
-        assert(success && "InitializeProcThreadAttributeList failed");
-        attrList = get();
-    }
-    StartupInfoAttributeList(const StartupInfoAttributeList &) = delete;
-    StartupInfoAttributeList &operator=(const StartupInfoAttributeList &) = delete;
-    ~StartupInfoAttributeList() {
-        DeleteProcThreadAttributeList(get());
-    }
-private:
-    PPROC_THREAD_ATTRIBUTE_LIST get() {
-        return reinterpret_cast<PPROC_THREAD_ATTRIBUTE_LIST>(buffer_.get());
-    }
-    std::unique_ptr<char[]> buffer_;
-};
-
-class StartupInfoInheritList {
-public:
-    StartupInfoInheritList(PPROC_THREAD_ATTRIBUTE_LIST attrList,
-                           std::vector<HANDLE> &&inheritList) :
-            inheritList_(std::move(inheritList)) {
-        const BOOL success = UpdateProcThreadAttribute(
-            attrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-            inheritList_.data(), inheritList_.size() * sizeof(HANDLE),
-            nullptr, nullptr);
-        assert(success && "UpdateProcThreadAttribute failed");
-    }
-    StartupInfoInheritList(const StartupInfoInheritList &) = delete;
-    StartupInfoInheritList &operator=(const StartupInfoInheritList &) = delete;
-    ~StartupInfoInheritList() {}
-private:
-    std::vector<HANDLE> inheritList_;
-};
-
-// WSL bash will print an error if the user tries to run elevated and
-// non-elevated instances simultaneously, and maybe other situations.  We'd
-// like to detect this situation and report the error back to the user.
-//
-// Two complications:
-//  - WSL bash will print the error to stdout/stderr, but if the file is a
-//    pipe, then WSL bash doesn't print it until it exits (presumably due to
-//    block buffering).
-//  - WSL bash puts up a prompt, "Press any key to continue", and it reads
-//    that key from the attached console, not from stdin.
-//
-// This function spawns the frontend again and instructs it to attach to the
-// new WSL bash console and send it a return keypress.
-//
-// The HANDLE must be inheritable.
-static void spawnPressReturnProcess(HANDLE wslProcess)
-{
-    const std::wstring exePath = getModuleFileName(getCurrentModule());
-    std::wstring cmdline;
-    cmdline.append(L"\"");
-    cmdline.append(exePath);
-    cmdline.append(L"\" --press-return ");
-    cmdline.append(std::to_wstring(reinterpret_cast<uintptr_t>(wslProcess)));
-    STARTUPINFOEXW sui {};
-    sui.StartupInfo.cb = sizeof(sui);
-    StartupInfoAttributeList attrList { sui.lpAttributeList, 1 };
-    StartupInfoInheritList inheritList { sui.lpAttributeList, { wslProcess } };
-    PROCESS_INFORMATION pi {};
-    const BOOL success = CreateProcessW(exePath.c_str(), &cmdline[0], nullptr, nullptr,
-        true, 0, nullptr, nullptr, &sui.StartupInfo, &pi);
-    if (!success) {
-        fprintf(stderr, "wslbridge warning: could not spawn: %s\n", wcsToMbs(cmdline).c_str());
-    }
-    if (WaitForSingleObject(pi.hProcess, 10000) != WAIT_OBJECT_0) {
-        fprintf(stderr, "wslbridge warning: process didn't exit after 10 seconds: %ls\n",
-            cmdline.c_str());
-    } else {
-        DWORD code {};
-        BOOL success = GetExitCodeProcess(pi.hProcess, &code);
-        if (!success) {
-            fprintf(stderr, "wslbridge warning: GetExitCodeProcess failed\n");
-        } else if (code != 0) {
-            fprintf(stderr, "wslbridge warning: process failed: %ls\n", cmdline.c_str());
-        }
-    }
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-}
-
-static int handlePressReturn(const char *pidStr) {
-    // AttachConsole replaces STD_INPUT_HANDLE with a new console input
-    // handle.  See https://github.com/rprichard/win32-console-docs.  The
-    // bash.exe process has already started, but console creation and
-    // process creation don't happen atomically, so poll for the console's
-    // existence.
-    auto str2handle = [](const char *str) {
-        std::stringstream ss(str);
-        uintptr_t n {};
-        ss >> n;
-        return reinterpret_cast<HANDLE>(n);
-    };
-    const HANDLE wslProcess = str2handle(pidStr);
-    const DWORD wslPid = GetProcessId(wslProcess);
-    FreeConsole();
-    for (int i = 0; i < 400; ++i) {
-        if (WaitForSingleObject(wslProcess, 0) == WAIT_OBJECT_0) {
-            // bash.exe has exited, give up immediately.
-            return 0;
-        } else if (AttachConsole(wslPid)) {
-            std::array<INPUT_RECORD, 2> ir {};
-            ir[0].EventType = KEY_EVENT;
-            ir[0].Event.KeyEvent.bKeyDown = TRUE;
-            ir[0].Event.KeyEvent.wRepeatCount = 1;
-            ir[0].Event.KeyEvent.wVirtualKeyCode = VK_RETURN;
-            ir[0].Event.KeyEvent.wVirtualScanCode = MapVirtualKey(VK_RETURN, MAPVK_VK_TO_VSC);
-            ir[0].Event.KeyEvent.uChar.UnicodeChar = '\r';
-            ir[1] = ir[0];
-            ir[1].Event.KeyEvent.bKeyDown = FALSE;
-            DWORD actual {};
-            WriteConsoleInputW(
-                GetStdHandle(STD_INPUT_HANDLE),
-                ir.data(), ir.size(), &actual);
-            return 0;
-        }
-        Sleep(25);
-    }
-    return 1;
-}
-
 static std::vector<char> readAllFromHandle(HANDLE h) {
     std::vector<char> ret;
     char buf[1024];
@@ -403,9 +273,6 @@ int main(int argc, char *argv[])
     setlocale(LC_ALL, "");
     cygwin_internal(CW_SYNC_WINENV);
     g_wakeupFd = new WakeupFd();
-
-    if (argc == 3 && !strcmp(argv[1], "--press-return"))
-        return handlePressReturn(argv[2]);
 
     Environment env;
     std::string distroName;
@@ -500,13 +367,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    /*
-    const bool hasCommand = optind < argc;
-    if (loginMode == LoginMode::Auto) {
-        loginMode = hasCommand ? LoginMode::No : LoginMode::Yes;
-    }
-    */
-
     // We must register this handler *before* determining the initial terminal
     // size.
     struct sigaction sa = {};
@@ -545,7 +405,8 @@ int main(int argc, char *argv[])
 
     std::array<wchar_t, 1024> buffer;
     int iRet = swprintf(buffer.data(), buffer.size(),
-                        L" -3%d -0%d -1%d -c%d -r%d -w%d -t%d",
+                        L" %ls-3%d -0%d -1%d -c%d -r%d -w%d -t%d",
+                        debugFork ? L"--debug-fork " : L"",
                         controlSocket.port(),
                         inputSocket.port(),
                         outputSocket.port(),
@@ -595,13 +456,25 @@ int main(int argc, char *argv[])
 
     const struct PipeHandles outputPipe = createPipe();
     const struct PipeHandles errorPipe = createPipe();
+
+    /* Initialize thread attribute list */
+    HANDLE Values[2];
+    Values[0] = outputPipe.wh;
+    Values[1] = errorPipe.wh;
+
+    SIZE_T AttrSize;
+    LPPROC_THREAD_ATTRIBUTE_LIST AttrList = NULL;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &AttrSize);
+    AttrList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, AttrSize);
+    InitializeProcThreadAttributeList(AttrList, 1, 0, &AttrSize);
+    BOOL bRes = UpdateProcThreadAttribute(
+                AttrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, /* 0x20002u */
+                Values, sizeof Values, NULL, NULL);
+    assert(bRes != 0);
+
     STARTUPINFOEXW sui {};
     sui.StartupInfo.cb = sizeof(sui);
-    StartupInfoAttributeList attrList { sui.lpAttributeList, 1 };
-    StartupInfoInheritList inheritList { sui.lpAttributeList,
-        { outputPipe.wh, errorPipe.wh }
-    };
-
+    sui.lpAttributeList = AttrList;
     sui.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
     sui.StartupInfo.hStdOutput = outputPipe.wh;
     sui.StartupInfo.hStdError = errorPipe.wh;
@@ -616,11 +489,11 @@ int main(int argc, char *argv[])
             formatErrorMessage(GetLastError()).c_str());
     }
 
+    HeapFree(GetProcessHeap(), 0, AttrList);
     CloseHandle(outputPipe.wh);
     CloseHandle(errorPipe.wh);
     success = SetHandleInformation(pi.hProcess, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
     assert(success && "SetHandleInformation failed");
-    spawnPressReturnProcess(pi.hProcess);
 
     std::atomic<bool> backendStarted = { false };
 
