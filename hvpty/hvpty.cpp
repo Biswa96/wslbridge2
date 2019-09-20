@@ -45,7 +45,7 @@ void GetVmId(
     int *WslVersion);
 
 /* return accepted client socket to receive */
-static SOCKET Initialize(std::wstring &command, GUID *VmId)
+static SOCKET Initialize(unsigned int *initPort, GUID *VmId)
 {
     int ret;
 
@@ -66,12 +66,12 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
 
     /* Try to bind to a dynamic port */
     int nretries = 0;
-    int initPort;
+    int port;
 
     while (nretries < BIND_MAX_RETRIES)
     {
-        initPort = random_port();
-        addr.ServiceId.Data1 = initPort;
+        port = random_port();
+        addr.ServiceId.Data1 = port;
         ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
         if (ret == 0)
             break;
@@ -79,45 +79,12 @@ static SOCKET Initialize(std::wstring &command, GUID *VmId)
         nretries ++;
     }
 
-    /* Fill-in the placeholder of port number */
-    {
-        int portpos = command.find(L"$PORT");
-        assert(portpos >= 0);
-        std::array<wchar_t, 1024> buffer;
-        ret = swprintf(buffer.data(), buffer.size(), L"%d", initPort);
-        assert(ret > 0);
-        command.replace(portpos, 5, buffer.data());
-    }
-
     ret = listen(sServer, -1);
     assert(ret == 0);
 
-    PROCESS_INFORMATION pi = {};
-    STARTUPINFOW si = {};
-    si.cb = sizeof si;
-    si.dwFlags = STARTF_USESHOWWINDOW;
-
-    if (IsDebugMode)
-        si.wShowWindow = SW_SHOW;
-    else
-        si.wShowWindow = SW_HIDE;
-
-    if (!command.empty())
-    {
-        ret = CreateProcessW(nullptr, &command[0], nullptr,
-                             nullptr, false, CREATE_NEW_CONSOLE,
-                             nullptr, nullptr, &si, &pi);
-        if (!ret)
-            fatal("backend start error: %d\n", GetLastError());
-    }
-    else
-        fatal("error: backend command string is empty\n");
-
-    SOCKET sClient = accept(sServer, nullptr, nullptr);
-    assert(sClient > 0);
-
-    closesocket(sServer);
-    return sClient;
+    /* Return port number and socket to caller */
+    *initPort = port;
+    return sServer;
 }
 
 /* return socket and connect to random port number */
@@ -362,28 +329,11 @@ int main(int argc, char *argv[])
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
 
-    /* If no extra command use login mode by default
-    const bool hasCommand = optind < argc;
-    if (loginMode == LoginMode::Auto)
-        loginMode = hasCommand ? LoginMode::No : LoginMode::Yes;
-    */
+    for (const auto &envPair : env.pairs())
+        appendWslArg(wslCmdLine, L"--env" + envPair.first + L"=" + envPair.second);
 
     if (loginMode == LoginMode::Yes)
         appendWslArg(wslCmdLine, L"--login");
-
-    for (const auto &envPair : env.pairs())
-        appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
-
-    {
-        std::array<wchar_t, 1024> buffer;
-        ret = swprintf(buffer.data(), buffer.size(),
-                       L" --cols %d --rows %d --port $PORT",
-                       initialSize.cols,
-                       initialSize.rows);
-
-        assert(ret > 0);
-        wslCmdLine.append(buffer.data());
-    }
 
     if (!wslDir.empty())
     {
@@ -392,6 +342,30 @@ int main(int argc, char *argv[])
         wslCmdLine.append(L"\"");
     }
 
+    GUID VmId;
+    int WslVersion;
+    GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
+    if (WslVersion != 2)
+        fatal("This is for WSL2 distributions only\n");
+
+    /* Create server to receive random port number */
+    unsigned int initPort = 0;
+    const SOCKET sServer = Initialize(&initPort, &VmId);
+
+    {
+        std::array<wchar_t, 1024> buffer;
+        ret = swprintf(
+                buffer.data(),
+                buffer.size(),
+                L" --cols %d --rows %d --port %d",
+                initialSize.cols,
+                initialSize.rows,
+                initPort);
+        assert(ret > 0);
+        wslCmdLine.append(buffer.data());
+    }
+
+    /* Append remaining non-option arguments as is */
     appendWslArg(wslCmdLine, L"--");
     for (int i = optind; i < argc; i++)
         appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
@@ -425,17 +399,35 @@ int main(int argc, char *argv[])
     cmdLine.append(L" /bin/sh -c ");
     appendWslArg(cmdLine, wslCmdLine);
 
+    PROCESS_INFORMATION pi = {};
+    STARTUPINFOW si = {};
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = IsDebugMode ? SW_SHOW : SW_HIDE;
+
+    ret = CreateProcessW(
+            wslPath.c_str(),
+            &cmdLine[0],
+            NULL,
+            NULL,
+            FALSE,
+            CREATE_NEW_CONSOLE,
+            NULL,
+            NULL,
+            &si,
+            &pi);
+    if (!ret)
+    {
+        fatal("error starting wsl.exe : %s\n",
+              formatErrorMessage(GetLastError()).c_str());
+    }
+
     if (IsDebugMode)
         wprintf(L"%ls\n", cmdLine.c_str());
 
-    /* Create server to receive random port number */
-    GUID VmId;
-    int WslVersion;
-    GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
-    if (WslVersion != 2)
-        fatal("This is for WSL2 distributions only\n");
-
-    const SOCKET sClient = Initialize(cmdLine, &VmId);
+    const SOCKET sClient = accept(sServer, NULL, NULL);
+    assert(sClient > 0);
+    closesocket(sServer);
 
     unsigned int randomPort = 0;
     ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
