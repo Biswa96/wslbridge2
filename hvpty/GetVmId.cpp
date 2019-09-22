@@ -117,7 +117,7 @@ public:
     virtual HRESULT STDMETHODCALLTYPE Shutdown(void) = 0;
 };
 
-void GetVmId(
+HRESULT GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
     int *WslVersion)
@@ -152,7 +152,6 @@ void GetVmId(
         hRes = wslSession->GetDefaultDistribution(&DistroId);
     else
         hRes = wslSession->GetDistributionId(DistroName.c_str(), 0, &DistroId);
-    assert(hRes == 0);
 
     if (hRes == 0)
     {
@@ -181,7 +180,12 @@ void GetVmId(
             &SockOut,
             &SockErr,
             &ServerSocket);
-        assert(hRes == 0);
+
+        if (hRes != 0)
+        {
+            *WslVersion = 0;
+            goto Cleanup;
+        }
 
         if (ServerHandle == nullptr && ServerSocket != 0)
             *WslVersion = 2;
@@ -189,8 +193,10 @@ void GetVmId(
             *WslVersion = 1;
     }
 
-    /* cleanup */
-    wslSession->Release();
+Cleanup:
+    if (wslSession)
+        wslSession->Release();
     CoUninitialize();
     WSACleanup();
+    return hRes;
 }

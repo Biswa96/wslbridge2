@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../hvsocket/hvsocket.h"
@@ -39,7 +40,7 @@ static int random_port(void)
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
-void GetVmId(
+HRESULT GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
     int *WslVersion);
@@ -180,6 +181,22 @@ static void* send_buffer(void *param)
     return nullptr;
 }
 
+struct PipeHandles {
+    HANDLE rh;
+    HANDLE wh;
+};
+
+static struct PipeHandles createPipe()
+{
+    SECURITY_ATTRIBUTES sa {};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    PipeHandles ret {};
+    const BOOL success = CreatePipe(&ret.rh, &ret.wh, &sa, 0);
+    assert(success && "CreatePipe failed");
+    return ret;
+}
+
 static void usage(const char *prog)
 {
     printf(
@@ -233,6 +250,7 @@ int main(int argc, char *argv[])
         { 0,               no_argument,       0,  0  },
     };
 
+    TerminalState termState;
     Environment env;
     std::string distroName;
     std::string customBackendPath;
@@ -344,7 +362,9 @@ int main(int argc, char *argv[])
 
     GUID VmId;
     int WslVersion;
-    GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
+    const HRESULT hRes = GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
+    if (hRes != 0)
+        fatal("GetVmId error: %s\n", formatErrorMessage(hRes).c_str());
     if (WslVersion != 2)
         fatal("This is for WSL2 distributions only\n");
 
@@ -399,22 +419,42 @@ int main(int argc, char *argv[])
     cmdLine.append(L" /bin/sh -c ");
     appendWslArg(cmdLine, wslCmdLine);
 
+    const struct PipeHandles outputPipe = createPipe();
+    const struct PipeHandles errorPipe = createPipe();
+
+    /* Initialize thread attribute list */
+    HANDLE Values[2];
+    Values[0] = outputPipe.wh;
+    Values[1] = errorPipe.wh;
+
+    SIZE_T AttrSize;
+    LPPROC_THREAD_ATTRIBUTE_LIST AttrList = NULL;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &AttrSize);
+    AttrList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, AttrSize);
+    InitializeProcThreadAttributeList(AttrList, 1, 0, &AttrSize);
+    BOOL bRes = UpdateProcThreadAttribute(
+                AttrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, /* 0x20002u */
+                Values, sizeof Values, NULL, NULL);
+    assert(bRes != 0);
+
     PROCESS_INFORMATION pi = {};
-    STARTUPINFOW si = {};
-    si.cb = sizeof si;
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = IsDebugMode ? SW_SHOW : SW_HIDE;
+    STARTUPINFOEXW si = {};
+    si.StartupInfo.cb = sizeof si;
+    si.lpAttributeList = AttrList;
+    si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdOutput = outputPipe.wh;
+    si.StartupInfo.hStdError = errorPipe.wh;
 
     ret = CreateProcessW(
             wslPath.c_str(),
             &cmdLine[0],
             NULL,
             NULL,
-            FALSE,
-            CREATE_NEW_CONSOLE,
+            TRUE,
+            IsDebugMode ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
             NULL,
             NULL,
-            &si,
+            &si.StartupInfo,
             &pi);
     if (!ret)
     {
@@ -422,8 +462,37 @@ int main(int argc, char *argv[])
               formatErrorMessage(GetLastError()).c_str());
     }
 
-    if (IsDebugMode)
-        wprintf(L"%ls\n", cmdLine.c_str());
+    HeapFree(GetProcessHeap(), 0, AttrList);
+    CloseHandle(outputPipe.wh);
+    CloseHandle(errorPipe.wh);
+    ret = SetHandleInformation(pi.hProcess, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    assert(ret && "SetHandleInformation failed");
+
+    const auto watchdog = std::thread([&]() {
+        WaitForSingleObject(pi.hProcess, INFINITE);
+
+        std::vector<char> outVec = readAllFromHandle(outputPipe.rh);
+        std::vector<char> errVec = readAllFromHandle(errorPipe.rh);
+        std::wstring outWide(outVec.size() / sizeof(wchar_t), L'\0');
+        memcpy(&outWide[0], outVec.data(), outWide.size() * sizeof(wchar_t));
+        std::string out { wcsToMbs(outWide, true) };
+        std::string err { errVec.begin(), errVec.end() };
+        out = stripTrailing(replaceAll(out, "Press any key to continue...", ""));
+        err = stripTrailing(err);
+
+        std::string msg;
+        if (!out.empty()) {
+            msg.append("note: wsl.exe output: ");
+            msg.append(out);
+            msg.push_back('\n');
+        }
+        if (!err.empty()) {
+            msg.append("note: backend error output: ");
+            msg.append(err);
+            msg.push_back('\n');
+        }
+        termState.fatal("%s", msg.c_str());
+    });
 
     const SOCKET sClient = accept(sServer, NULL, NULL);
     assert(sClient > 0);
@@ -433,6 +502,13 @@ int main(int argc, char *argv[])
     ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
     assert(ret > 0);
     closesocket(sClient);
+
+    if (IsDebugMode)
+    {
+        wprintf(L"cols: %d row: %d initPort: %d randomPort: %d\n",
+                initialSize.cols, initialSize.rows, initPort, randomPort);
+        wprintf(L"command: %ls\n", &cmdLine[0]);
+    }
 
     /* Create four I/O sockets and connect with WSL server */
     for (int i = 0; i < 4; i++)
@@ -455,7 +531,7 @@ int main(int argc, char *argv[])
     ret = pthread_create(&tidInput, nullptr, send_buffer, nullptr);
     assert(ret == 0);
 
-    TerminalState termState;
+    
     termState.enterRawMode();
 
     char data[1024];
