@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "SocketIo.hpp"
 
@@ -359,4 +360,36 @@ std::string formatErrorMessage(DWORD err)
         ret += ")";
     }
     return ret;
+}
+
+std::vector<char> readAllFromHandle(HANDLE h)
+{
+    std::vector<char> ret;
+    char buf[1024];
+    DWORD actual {};
+    while (ReadFile(h, buf, sizeof(buf), &actual, nullptr) && actual > 0)
+    {
+        ret.insert(ret.end(), buf, buf + actual);
+    }
+    return ret;
+}
+
+std::string replaceAll(std::string str, const std::string &from, const std::string &to)
+{
+    size_t pos {};
+    while ((pos = str.find(from, pos)) != std::string::npos)
+    {
+        str = str.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+    return str;
+}
+
+std::string stripTrailing(std::string str)
+{
+    while (!str.empty() && isspace(str.back()))
+    {
+        str.pop_back();
+    }
+    return str;
 }

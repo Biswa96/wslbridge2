@@ -237,32 +237,6 @@ static struct PipeHandles createPipe()
     return ret;
 }
 
-static std::vector<char> readAllFromHandle(HANDLE h) {
-    std::vector<char> ret;
-    char buf[1024];
-    DWORD actual {};
-    while (ReadFile(h, buf, sizeof(buf), &actual, nullptr) && actual > 0) {
-        ret.insert(ret.end(), buf, buf + actual);
-    }
-    return ret;
-}
-
-static std::string replaceAll(std::string str, const std::string &from, const std::string &to) {
-    size_t pos {};
-    while ((pos = str.find(from, pos)) != std::string::npos) {
-        str = str.replace(pos, from.size(), to);
-        pos += to.size();
-    }
-    return str;
-}
-
-static std::string stripTrailing(std::string str) {
-    while (!str.empty() && isspace(str.back())) {
-        str.pop_back();
-    }
-    return str;
-}
-
 static void invalid_arg(const char *arg)
 {
     fatal("error: the %s option requires a non-empty string argument\n", arg);
@@ -284,9 +258,8 @@ int main(int argc, char *argv[])
 
     int debugFork = 0;
     int c = 0;
-    if (argv[0][0] == '-') {
+    if (argv[0][0] == '-')
         loginMode = LoginMode::Yes;
-    }
 
     const char shortopts[] = "+b:d:e:hlLu:w:W:";
     const struct option longopts[] = {
@@ -397,40 +370,47 @@ int main(int argc, char *argv[])
     if (debugFork)
         appendWslArg(wslCmdLine, L"--debug-fork");
 
+    for (const auto &envPair : env.pairs())
+        appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
+
+    if (loginMode == LoginMode::Yes)
+        appendWslArg(wslCmdLine, L"--login");
+
     if (!wslDir.empty())
     {
         appendWslArg(wslCmdLine, L"-C");
         appendWslArg(wslCmdLine, mbsToWcs(wslDir));
     }
 
-    std::array<wchar_t, 1024> buffer;
-    int iRet = swprintf(buffer.data(), buffer.size(),
-                        L" %ls-3%d -0%d -1%d -c%d -r%d -w%d -t%d",
-                        debugFork ? L"--debug-fork " : L"",
-                        controlSocket.port(),
-                        inputSocket.port(),
-                        outputSocket.port(),
-                        initialSize.cols,
-                        initialSize.rows,
-                        kOutputWindowSize,
-                        kOutputWindowSize / 4);
-    assert(iRet > 0);
-    wslCmdLine.append(buffer.data());
+    {
+        std::array<wchar_t, 1024> buffer;
+        int iRet = swprintf(
+                    buffer.data(),
+                    buffer.size(),
+                    L" %ls-3%d -0%d -1%d -c%d -r%d -w%d -t%d",
+                    debugFork ? L"--debug-fork " : L"",
+                    controlSocket.port(),
+                    inputSocket.port(),
+                    outputSocket.port(),
+                    initialSize.cols,
+                    initialSize.rows,
+                    kOutputWindowSize,
+                    kOutputWindowSize / 4);
+        assert(iRet > 0);
+        wslCmdLine.append(buffer.data());
+    }
 
-    if (loginMode == LoginMode::Yes)
-        appendWslArg(wslCmdLine, L"-l");
-
-    for (const auto &envPair : env.pairs())
-        appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
-
+    /* Append remaining non-option arguments as is */
     appendWslArg(wslCmdLine, L"--");
     for (int i = optind; i < argc; ++i)
         appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
 
+    /* Append wsl.exe options and its arguments */
     std::wstring cmdLine;
     cmdLine.append(L"\"");
     cmdLine.append(wslPath);
     cmdLine.append(L"\"");
+
     if (!distroName.empty())
     {
         cmdLine.append(L" -d ");
@@ -480,10 +460,17 @@ int main(int argc, char *argv[])
     sui.StartupInfo.hStdError = errorPipe.wh;
 
     PROCESS_INFORMATION pi = {};
-    BOOL success = CreateProcessW(wslPath.c_str(), &cmdLine[0], nullptr, nullptr,
-        true,
-        debugFork ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
-        nullptr, nullptr, &sui.StartupInfo, &pi);
+    BOOL success = CreateProcessW(
+                    wslPath.c_str(),
+                    &cmdLine[0],
+                    NULL,
+                    NULL,
+                    TRUE,
+                    debugFork ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
+                    NULL,
+                    NULL,
+                    &sui.StartupInfo,
+                    &pi);
     if (!success) {
         fatal("error starting wsl.exe adapter: %s\n",
             formatErrorMessage(GetLastError()).c_str());
@@ -551,7 +538,6 @@ int main(int argc, char *argv[])
     outputSocket.close();
 
     g_terminalState.enterRawMode();
-
 
     backendStarted = true;
 

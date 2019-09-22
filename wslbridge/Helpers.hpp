@@ -21,5 +21,8 @@ std::wstring findBackendProgram(const std::string &customBackendPath, const wcha
 void appendWslArg(std::wstring &out, const std::wstring &arg);
 std::string errorMessageToString(DWORD err);
 std::string formatErrorMessage(DWORD err);
+std::vector<char> readAllFromHandle(HANDLE h);
+std::string replaceAll(std::string str, const std::string &from, const std::string &to);
+std::string stripTrailing(std::string str);
 
 #endif /* HELPERS_HPP */
