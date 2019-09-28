@@ -17,6 +17,7 @@
 #include <sys/ioctl.h>
 #include <sys/signalfd.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -166,16 +167,18 @@ int main(int argc, char *argv[])
         assert(ret == 0);
     }
 
-    if (IsDebugMode)
-        printf("cols: %d row: %d port: %d\n",
-               winp.ws_col, winp.ws_row, initPort);
-
     /* First connect to Windows side then send random port */
     const int client_sock = Initialize(initPort);
     const int server_sock = create_vmsock(&randomPort);
     ret = send(client_sock, &randomPort, sizeof randomPort, 0);
     assert(ret > 0);
     close(client_sock);
+
+    if (IsDebugMode)
+    {
+        printf("cols: %d rows: %d initPort: %d randomPort: %d\n",
+               winp.ws_col, winp.ws_row, initPort, randomPort);
+    }
 
     /* Now act as a server and accept four I/O channels */
     union IoSockets ioSockets;
@@ -208,15 +211,15 @@ int main(int argc, char *argv[])
         assert(sigfd > 0);
 
         struct pollfd fds[] = {
-                { ioSockets.inputSock,    POLLIN, 0 },
-                { ioSockets.controlSock,  POLLIN, 0 },
-                { mfd,                    POLLIN, 0 },
-                { sigfd,                  POLLIN, 0 }
+                { ioSockets.inputSock, POLLIN, 0 },
+                { ioSockets.controlSock, POLLIN, 0 },
+                { mfd, POLLIN, 0 }
             };
 
-        char data[1024];
+        ssize_t readRet = 0, writeRet = 0;
+        char data[1024]; /* Buffer to hold raw data from pty */
 
-        while(1)
+        do
         {
             ret = poll(fds, (sizeof fds / sizeof fds[0]), -1);
             assert(ret > 0);
@@ -224,9 +227,9 @@ int main(int argc, char *argv[])
             /* Receive input buffer and write it to master */
             if (fds[0].revents & POLLIN)
             {
-                ret = recv(ioSockets.inputSock, data, sizeof data, 0);
-                assert(ret > 0);
-                ret = write(mfd_dp, &data, ret);
+                readRet = recv(ioSockets.inputSock, data, sizeof data, 0);
+                if (readRet > 0)
+                    writeRet = write(mfd_dp, data, readRet);
             }
 
             /* Resize window when buffer received in control socket */
@@ -242,33 +245,35 @@ int main(int argc, char *argv[])
                 assert(ret == 0);
 
                 if (IsDebugMode)
-                    printf("cols: %d row: %d\n", winp.ws_col, winp.ws_row);
+                    printf("cols: %d rows: %d\n", winp.ws_col, winp.ws_row);
             }
 
             /* Receive buffers from master and send to output socket */
             if (fds[2].revents & POLLIN)
             {
-                ret = read(mfd, data, sizeof data);
-                assert(ret > 0);
-                ret = send(ioSockets.outputSock, data, ret, 0);
+                readRet = read(mfd, data, sizeof data);
+                if (readRet > 0)
+                    writeRet = send(ioSockets.outputSock, data, readRet, 0);
             }
 
+            /* Shutdown I/O sockets when child process terminates */
             if (fds[2].revents & (POLLERR | POLLHUP))
             {
+                struct signalfd_siginfo sigbuff;
+                ret = read(sigfd, &sigbuff, sizeof sigbuff);
+                if (sigbuff.ssi_signo != SIGCHLD)
+                    perror("unexpected signal");
+
+                int wstatus;
+                if (waitpid(child, &wstatus, 0) != child)
+                    perror("waitpid");
+
                 for (int i = 0; i < 4; i++)
                     shutdown(ioSockets.sock[i], SHUT_RDWR);
                 break;
             }
-
-            /* Break if child process in slave side is terminated */
-            if (fds[3].revents & POLLIN)
-            {
-                struct signalfd_siginfo sigbuff;
-                ret = read(sigfd, &sigbuff, sizeof sigbuff);
-                assert(sigbuff.ssi_signo == SIGCHLD);
-                break;
-            }
         }
+        while (writeRet > 0);
 
         close(sigfd);
         close(mfd_dp);
@@ -285,7 +290,8 @@ int main(int argc, char *argv[])
         if (!childParams.cwd.empty())
         {
             res = chdir(childParams.cwd.c_str());
-            assert(res == 0);
+            if (res != 0)
+                perror("chdir");
         }
 
         for (int i = optind; i < argc; ++i)
@@ -320,7 +326,8 @@ int main(int argc, char *argv[])
         childParams.argv.push_back(nullptr);
 
         res = execvp(childParams.prog.c_str(), childParams.argv.data());
-        assert(res > 0);
+        if (res != 0)
+            perror("execvp");
     }
     else
         perror("fork");

@@ -154,6 +154,7 @@ static void* resize_window(void *set)
             printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
     }
 
+    pthread_exit(&ret);
     return nullptr;
 }
 
@@ -178,6 +179,7 @@ static void* send_buffer(void *param)
         }
     }
 
+    pthread_exit(&ret);
     return nullptr;
 }
 
@@ -531,7 +533,6 @@ int main(int argc, char *argv[])
     ret = pthread_create(&tidInput, nullptr, send_buffer, nullptr);
     assert(ret == 0);
 
-    
     termState.enterRawMode();
 
     char data[1024];
@@ -549,5 +550,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < 4; i++)
         closesocket(g_ioSockets.sock[i]);
     WSACleanup();
+    pthread_join(tidResize, NULL);
+    pthread_join(tidInput, NULL);
     termState.exitCleanly(0);
 }
