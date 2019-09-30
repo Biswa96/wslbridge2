@@ -213,6 +213,16 @@ int main(int argc, char *argv[])
         program.append(" ");
     }
 
+    /*
+     * Detect if standard output is console handle e.g. ConPTY
+     * If true then just execute the program without using RawPty
+     */
+    if (GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_CHAR)
+    {
+        system(program.c_str());
+        return 0;
+    }
+
     RawPty(program, true, true);
 
     return 0;
