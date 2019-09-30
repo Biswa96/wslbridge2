@@ -148,8 +148,8 @@ std::string errorString(BridgedError err) {
         default:
             return "WSL error #" + std::to_string(err.actual);
     }
-    char buf[512];
-    char *errStr = strerror_r(bridgedErrno, buf, sizeof(buf));
+
+    char *errStr = strerror(bridgedErrno);
     assert(errStr != nullptr);
     return errStr;
 }
