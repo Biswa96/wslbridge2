@@ -444,22 +444,22 @@ int main(int argc, char *argv[]) {
     ChildParams childParams;
     bool loginMode = false;
 
-    const struct option kOptionTable[] = {
+    const char shortopts[] = "+3:0:1:c:r:w:t:e:C:l";
+    const struct option longopts[] = {
         // This debugging option is handled earlier.  Include it in this table
         // just to discard it.
-        { "debug-fork",     false, nullptr,     0 },
-        { nullptr,          false, nullptr,     0 },
+        { "cols",       required_argument, 0, 'c' },
+        { "debug-fork", no_argument,       0,  0  },
+        { "login",      no_argument,       0, 'l' },
+        { "rows",       required_argument, 0, 'r' },
+        { 0,            no_argument,       0,  0  },
     };
 
     int ch = 0;
-    while ((ch = getopt_long(argc, argv, "+3:0:1:c:r:w:t:e:C:l", kOptionTable, nullptr)) != -1)
+    while ((ch = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
         switch (ch)
         {
-            case 0:
-                // This is returned for the two long options.  getopt_long
-                // already writes to ptyMode, so there's nothing more to do.
-                break;
             case '3': controlSocketPort = atoi(optarg); break;
             case '0': inputSocketPort = atoi(optarg); break;
             case '1': outputSocketPort = atoi(optarg); break;
