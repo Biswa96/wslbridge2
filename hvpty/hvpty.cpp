@@ -350,8 +350,10 @@ int main(int argc, char *argv[])
     wslCmdLine.append(L")\"");
 
     for (const auto &envPair : env.pairs())
-        appendWslArg(wslCmdLine, L"--env" + envPair.first + L"=" + envPair.second);
-
+    {
+        appendWslArg(wslCmdLine, L"--env");
+        appendWslArg(wslCmdLine, envPair.first + L"=" + envPair.second);
+    }
     if (loginMode == LoginMode::Yes)
         appendWslArg(wslCmdLine, L"--login");
 

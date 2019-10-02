@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
         { "login", no_argument,       0, 'l' },
         { "port",  required_argument, 0, 'p' },
         { "path",  required_argument, 0, 'P' },
+	{ "env",   required_argument, 0, 'e' },
         { "rows",  required_argument, 0, 'r' },
         { 0,       no_argument,       0,  0  },
     };
