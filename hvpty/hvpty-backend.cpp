@@ -20,6 +20,7 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+#include <wordexp.h>
 
 #include <linux/vm_sockets.h>
 
@@ -292,7 +293,12 @@ int main(int argc, char *argv[])
         /* Changed directory should affect in child process */
         if (!childParams.cwd.empty())
         {
-            res = chdir(childParams.cwd.c_str());
+            wordexp_t p;    wordexp(childParams.cwd.c_str(), &p, 0);
+            if (p.we_wordc != 1) {
+                fprintf(stderr, "path expandsion failed, word expanded to %ld paths", p.we_wordc);
+            }
+            res = chdir(p.we_wordv[0]);
+            wordfree(&p);
             if (res != 0)
                 perror("chdir");
         }
