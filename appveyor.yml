@@ -27,11 +27,11 @@ environment:
 
 before_build:
 - sh: |
-    make -s
+    make -s RELEASE=1
 
 - cmd: |
     set PATH=C:\cygwin64;C:\cygwin64\bin;C:\cygwin64\usr\bin;%PATH%
-    make -s
+    make -s RELEASE=1
 
 build_script:
 - ps: |
