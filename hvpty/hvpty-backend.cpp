@@ -99,6 +99,8 @@ static void usage(const char *prog)
     "\n"
     "Options:\n"
     "  -c, --cols N   Set N columns for pty\n"
+    "  -e VAR         Copies VAR into the WSL environment.\n"
+    "  -e VAR=VAL     Sets VAR to VAL in the WSL environment.\n"
     "  -h, --help     Show this usage information\n"
     "  -l, --login    Start a login shell\n"
     "  -P, --path dir Start in certain path\n"
@@ -137,11 +139,11 @@ int main(int argc, char *argv[])
     const char shortopts[] = "+c:e:hlp:P:r:";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
+        { "env",   required_argument, 0, 'e' },
         { "help",  no_argument,       0, 'h' },
         { "login", no_argument,       0, 'l' },
         { "port",  required_argument, 0, 'p' },
         { "path",  required_argument, 0, 'P' },
-	{ "env",   required_argument, 0, 'e' },
         { "rows",  required_argument, 0, 'r' },
         { 0,       no_argument,       0,  0  },
     };

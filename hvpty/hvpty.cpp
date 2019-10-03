@@ -243,6 +243,7 @@ int main(int argc, char *argv[])
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
+        { "env",           required_argument, 0, 'e' },
         { "help",          no_argument,       0, 'h' },
         { "login",         no_argument,       0, 'l' },
         { "no-login",      no_argument,       0, 'L' },
