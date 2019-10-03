@@ -243,6 +243,7 @@ int main(int argc, char *argv[])
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
+        { "env",           required_argument, 0, 'e' },
         { "help",          no_argument,       0, 'h' },
         { "login",         no_argument,       0, 'l' },
         { "no-login",      no_argument,       0, 'L' },
@@ -350,8 +351,10 @@ int main(int argc, char *argv[])
     wslCmdLine.append(L")\"");
 
     for (const auto &envPair : env.pairs())
-        appendWslArg(wslCmdLine, L"--env" + envPair.first + L"=" + envPair.second);
-
+    {
+        appendWslArg(wslCmdLine, L"--env");
+        appendWslArg(wslCmdLine, envPair.first + L"=" + envPair.second);
+    }
     if (loginMode == LoginMode::Yes)
         appendWslArg(wslCmdLine, L"--login");
 
