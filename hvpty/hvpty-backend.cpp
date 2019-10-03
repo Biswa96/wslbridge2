@@ -293,7 +293,8 @@ int main(int argc, char *argv[])
         /* Changed directory should affect in child process */
         if (!childParams.cwd.empty())
         {
-            wordexp_t p;    wordexp(childParams.cwd.c_str(), &p, 0);
+            wordexp_t p;
+            wordexp(childParams.cwd.c_str(), &p, 0);
             if (p.we_wordc != 1) {
                 fprintf(stderr, "path expandsion failed, word expanded to %ld paths", p.we_wordc);
             }
