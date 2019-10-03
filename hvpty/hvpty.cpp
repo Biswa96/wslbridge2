@@ -13,6 +13,9 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
+#ifdef __CYGWIN__
+#include <sys/cygwin.h>
+#endif
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -183,6 +186,24 @@ static void* send_buffer(void *param)
     return nullptr;
 }
 
+static void* receive_buffer(void *param)
+{
+    int ret;
+    char data[1024];
+
+    while (1)
+    {
+        ret = recv(g_ioSockets.outputSock, data, sizeof data, 0);
+        if (ret > 0)
+            ret = write(STDOUT_FILENO, data, ret);
+        else
+            break;
+    }
+
+    pthread_exit(&ret);
+    return nullptr;
+}
+
 struct PipeHandles {
     HANDLE rh;
     HANDLE wh;
@@ -232,6 +253,10 @@ static void invalid_arg(const char *arg)
 
 int main(int argc, char *argv[])
 {
+#ifdef __CYGWIN__
+    cygwin_internal(CW_SYNC_WINENV);
+#endif
+
     srand(time(nullptr));
     int ret;
 
@@ -496,6 +521,7 @@ int main(int argc, char *argv[])
             msg.append(err);
             msg.push_back('\n');
         }
+
         termState.fatal("%s", msg.c_str());
     });
 
@@ -536,24 +562,22 @@ int main(int argc, char *argv[])
     ret = pthread_create(&tidInput, nullptr, send_buffer, nullptr);
     assert(ret == 0);
 
+    /* Create thread to send input buffer to input socket */
+    pthread_t tidOutput;
+    ret = pthread_create(&tidOutput, nullptr, receive_buffer, nullptr);
+    assert(ret == 0);
+
     termState.enterRawMode();
 
-    char data[1024];
-
-    while (1)
-    {
-        ret = recv(g_ioSockets.outputSock, data, sizeof data, 0);
-        if (ret > 0)
-            ret = write(STDOUT_FILENO, data, ret);
-        else
-            break;
-    }
+    pthread_join(tidResize, nullptr);
+    pthread_join(tidInput, nullptr);
+    pthread_join(tidOutput, nullptr);
 
     /* cleanup */
     for (int i = 0; i < 4; i++)
         closesocket(g_ioSockets.sock[i]);
-    WSACleanup();
-    pthread_join(tidResize, NULL);
-    pthread_join(tidInput, NULL);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
     termState.exitCleanly(0);
+    WSACleanup();
 }
