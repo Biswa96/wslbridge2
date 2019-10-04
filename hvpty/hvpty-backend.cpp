@@ -4,9 +4,11 @@
  * Copyright (C) 2019 Biswapriyo Nath
  */
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
+#include <net/if.h>
 #include <poll.h>
 #include <pty.h>
 #include <pwd.h>
@@ -43,7 +45,7 @@ union IoSockets
 };
 
 /* Return created client socket to send */
-static int Initialize(const unsigned int initPort)
+static int ConnectHvSocket(const unsigned int initPort)
 {
     int ret;
 
@@ -63,7 +65,7 @@ static int Initialize(const unsigned int initPort)
 }
 
 /* Return socket and random port number */
-static int create_vmsock(unsigned int *randomPort)
+static int ListenVsockAnyPort(unsigned int *randomPort)
 {
     int ret;
 
@@ -90,6 +92,26 @@ static int create_vmsock(unsigned int *randomPort)
     /* Return port number and socket to caller */
     *randomPort = addr.svm_port;
     return sSock;
+}
+
+/* Set custom environment variables, not so important */
+static void CreateEnvironmentBlock(void)
+{
+    const int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0)
+        perror("socket(AF_INET)");
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
+    const int ret = ioctl(sockfd, SIOCGIFADDR, &ifr);
+    if (ret != 0)
+        perror("ioctl(SIOCGIFADDR)");
+
+    /* Do not override environment if the name already exists */
+    struct sockaddr_in *addr_in = (struct sockaddr_in *)&ifr.ifr_addr;
+    setenv("WSL_GUEST_IP", inet_ntoa(addr_in->sin_addr), false);
+
+    close(sockfd);
 }
 
 static void usage(const char *prog)
@@ -172,8 +194,8 @@ int main(int argc, char *argv[])
     }
 
     /* First connect to Windows side then send random port */
-    const int client_sock = Initialize(initPort);
-    const int server_sock = create_vmsock(&randomPort);
+    const int client_sock = ConnectHvSocket(initPort);
+    const int server_sock = ListenVsockAnyPort(&randomPort);
     ret = send(client_sock, &randomPort, sizeof randomPort, 0);
     assert(ret > 0);
     close(client_sock);
@@ -246,7 +268,8 @@ int main(int argc, char *argv[])
                 winp.ws_xpixel = 0;
                 winp.ws_ypixel = 0;
                 ret = ioctl(mfd, TIOCSWINSZ, &winp);
-                assert(ret == 0);
+                if (ret != 0)
+                    perror("ioctl(TIOCSWINSZ)");
 
                 if (IsDebugMode)
                     printf("cols: %d rows: %d\n", winp.ws_col, winp.ws_row);
@@ -290,14 +313,21 @@ int main(int argc, char *argv[])
         for (char *const &setting : childParams.env)
             putenv(setting);
 
+        /* Set WSL_GUEST_IP environment variable */
+        CreateEnvironmentBlock();
+
         /* Changed directory should affect in child process */
         if (!childParams.cwd.empty())
         {
             wordexp_t expanded_cwd;
             wordexp(childParams.cwd.c_str(), &expanded_cwd, 0);
-            if (expanded_cwd.we_wordc != 1) {
-                fprintf(stderr, "path expandsion failed, word expanded to %ld paths", expanded_cwd.we_wordc);
+            if (expanded_cwd.we_wordc != 1)
+            {
+                fprintf(stderr,
+                    "path expansion failed, word expanded to %ld paths",
+                    expanded_cwd.we_wordc);
             }
+
             res = chdir(expanded_cwd.we_wordv[0]);
             wordfree(&expanded_cwd);
             if (res != 0)

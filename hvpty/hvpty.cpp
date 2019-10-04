@@ -43,7 +43,8 @@ static int random_port(void)
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
-HRESULT GetVmId(
+void WINAPI GetIp(void);
+HRESULT WINAPI GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
     int *WslVersion);
@@ -253,6 +254,8 @@ static void invalid_arg(const char *arg)
 
 int main(int argc, char *argv[])
 {
+    /* Set WSL_HOST_IP environment variable */
+    GetIp();
 #ifdef __CYGWIN__
     cygwin_internal(CW_SYNC_WINENV);
 #endif

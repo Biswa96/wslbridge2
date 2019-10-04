@@ -14,8 +14,9 @@ ifdef RELEASE
 LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
-LIBS = -lws2_32 -lole32
+LIBS = -liphlpapi -lole32 -lws2_32
 BINS = \
+$(BINDIR)/GetIp.obj \
 $(BINDIR)/GetVmId.obj \
 $(BINDIR)/Helpers.obj \
 $(BINDIR)/hvpty.obj \
@@ -31,6 +32,9 @@ $(NAME) : $(BINS)
 	$(CXX) $^ $(LFLAGS) $(LIBS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
 
+$(BINDIR)/GetIp.obj : GetIp.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+    
 $(BINDIR)/GetVmId.obj : GetVmId.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
