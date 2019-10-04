@@ -2,6 +2,8 @@
  * This file is part of wslbridge2 project
  * Licensed under the GNU General Public License version 3
  * Copyright (C) 2019 Biswapriyo Nath
+ *
+ * README.md: Main readme file for wslbridge2 project
 -->
 
 # wslbridge2
@@ -60,6 +62,11 @@ Place `wslbridge2.exe` and `wslbridge2-backend` in same Windows folder.
 Run `wslbridge2.exe`.
 
 
+## For Developers
+
+See [Developers page](DEVELOP.md) for further details.
+
+
 ## Caveats
 
 * The graphics may lag sometimes due to multiple layers of data transitions
@@ -77,19 +84,29 @@ in future Windows 10 releases due to usage of undocumented COM methods.
   - [Linux kernel: vm_sockets.h][5]
   - [VMWare: VMCI Socket Programming Guide][6]
   - [man7: vsock(7)][7]
-  - [wslbridge](https://github.com/rprichard/wslbridge)
+  - [wslbridge][8]
   - [win32-console-docs](https://github.com/rprichard/win32-console-docs)
   - [XConPty](https://github.com/Biswa96/XConPty)
+
+
+## Acknowledgments
+
+This is based on the Ryan Prichard's (@rprichard) [wslbridge][8] project.
+Also thanks to @mintty, @therealkenc, @dxhisboy and all other contributors
+for helping with this project.
+
 
 ## Contributions
 
 Contributions are greatly appreciated. Please keep these following points:
 
-* For a big change, add an issue before creating a pull request.
-* Append a tag name in pull request message, see previous commits.
-* Make the code easy to read and understand.
+* For a big change, try to add an issue before creating a pull request.
+* Append a tag name in commit message, see previous commits as reference.
+* Make the code easy to read and understand with proper syntax.
+* If possible try to minimize memory usage.
 * Use 4 spaces for indentation.
-* If you are not programmer you can also contribute to update documentations.
+* If you are not programmer you can contribute to further improve or additions
+to documentations. Also share and discuss what features you like to have.
 
 
 ## License
@@ -122,3 +139,4 @@ A full copy of the license is provided in [LICENSE](LICENSE).
 [5]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/vm_sockets.h
 [6]: https://www.vmware.com/support/developer/vmci-sdk/
 [7]: http://man7.org/linux/man-pages/man7/vsock.7.html
+[8]: https://github.com/rprichard/wslbridge.git
