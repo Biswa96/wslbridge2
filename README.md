@@ -61,6 +61,27 @@ See the sample [screenshot](images/Headless_Mode.PNG) without headless mode.
 Place `wslbridge2.exe` and `wslbridge2-backend` in same Windows folder.
 Run `wslbridge2.exe`.
 
+### Options
+
+Running `wslbridge2.exe` and `hvpty.exe` will open default WSL distribution.
+Make sure the WSL version matches with the executable name as stated above.
+Options are similar for both WSL1 and WSL2 binaries. Here are the options:
+
+* `-b` or `--backend`: Overrides the default path of backend binaries.
+* `-d` or `--distribution`: Run the specified distribution.
+* `-e` or `--env`:  Copies Windows environment variable into the WSL.
+* `-h` or `--help`: Show this usage information.
+* `-l` or `--login`: Start a login shell in WSL.
+* `-u` or `--user`: Run as the specified user in WSL.
+* `-w` or `--windir`: Changes the working directory to a Windows path.
+* `-W` or `--wsldir`: Changes the working directory to WSL path.
+
+Always use single quote or double quote to mention any folder path. For paths
+in WSL, `"~"` can also be used for user's home folder. If no command line is
+provided, this launches the default shell. The non-options arguments will be
+executed as is. For example, `wslbridge2.exe ls` will execute `ls` command
+in current working directory in default WSL distribution.
+
 
 ## For Developers
 
