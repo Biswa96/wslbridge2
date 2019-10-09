@@ -14,11 +14,12 @@ ifdef RELEASE
 LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
-BINS = \
+OBJS = \
 $(BINDIR)/Helpers.obj \
 $(BINDIR)/LocalSock.obj \
 $(BINDIR)/SocketIo.obj \
 $(BINDIR)/TerminalState.obj \
+$(BINDIR)/WinHelper.obj \
 $(BINDIR)/wslbridge.obj
 
 # Windows header specific options
@@ -26,7 +27,7 @@ CCOPT = -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE
 
 all : $(BINDIR) $(NAME)
 
-$(NAME) : $(BINS)
+$(NAME) : $(OBJS)
 	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
 
@@ -41,6 +42,9 @@ $(BINDIR)/SocketIo.obj : SocketIo.cpp
 
 $(BINDIR)/TerminalState.obj : TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/WinHelper.obj : WinHelper.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/wslbridge.obj : wslbridge.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@

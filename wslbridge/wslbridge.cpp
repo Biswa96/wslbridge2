@@ -20,7 +20,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __CYGWIN__
 #include <sys/cygwin.h>
+#endif
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -41,6 +43,7 @@
 #include "SocketIo.hpp"
 #include "LocalSock.hpp"
 #include "TerminalState.hpp"
+#include "WinHelper.hpp"
 
 const int32_t kOutputWindowSize = 8192;
 
@@ -58,7 +61,7 @@ struct IoLoop {
 };
 
 static void fatalConnectionBroken() {
-    g_terminalState.fatal("\nwslbridge error: connection broken\n");
+    g_terminalState.fatal("\nwslbridge2 frontend error: connection broken\n");
 }
 
 static void writePacket(IoLoop &ioloop, const Packet &p) {
@@ -210,8 +213,7 @@ static void usage(const char *prog)
     "  -e VAR        Copies VAR into the WSL environment.\n"
     "  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n"
     "  -h, --help    Show this usage information\n"
-    "  -l            Start a login shell.\n"
-    "  --no-login    Do not start a login shell.\n"
+    "  -l, --login   Start a login shell.\n"
     "  -u, --user    WSL User Name\n"
     "                Run as the specified user\n"
     "  -w, --windir  Folder\n"
@@ -244,8 +246,14 @@ static void invalid_arg(const char *arg)
 
 int main(int argc, char *argv[])
 {
-    setlocale(LC_ALL, "");
+    if (GetWindowsBuild() < 17763)
+        fatal("Windows 10 version is older than minimal requirement.\n");
+
+#ifdef __CYGWIN__
     cygwin_internal(CW_SYNC_WINENV);
+#endif
+
+    setlocale(LC_ALL, "");
     g_wakeupFd = new WakeupFd();
 
     Environment env;
@@ -254,29 +262,29 @@ int main(int argc, char *argv[])
     std::string winDir;
     std::string wslDir;
     std::string userName;
-    enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
-
     int debugFork = 0;
-    int c = 0;
-    if (argv[0][0] == '-')
-        loginMode = LoginMode::Yes;
+    bool loginMode = false;
 
-    const char shortopts[] = "+b:d:e:hlLu:w:W:";
+    if (argv[0][0] == '-')
+        loginMode = true;
+
+    const char shortopts[] = "+b:d:e:hlu:w:W:";
     const struct option longopts[] = {
         { "backend",        required_argument,  nullptr,     'b' },
         { "distribution",   required_argument,  nullptr,     'd' },
         { "help",           no_argument,        nullptr,     'h' },
         { "debug-fork",     no_argument,       &debugFork,    1  },
-        { "no-login",       no_argument,        nullptr,     'L' },
+        { "login",          no_argument,        nullptr,     'l' },
         { "user",           required_argument,  nullptr,     'u' },
         { "windir",         required_argument,  nullptr,     'w' },
         { "wsldir",         required_argument,  nullptr,     'W' },
         { nullptr,          no_argument,        nullptr,      0  },
     };
 
-    while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
+    int ch = 0;
+    while ((ch = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
-        switch (c)
+        switch (ch)
         {
             case 0:
                 /* Ignore long option. */
@@ -300,17 +308,17 @@ int main(int argc, char *argv[])
             case 'h':
                 usage(argv[0]);
                 break;
+
             case 'd':
                 distroName = optarg;
                 if (distroName.empty())
                     invalid_arg("distribution");
                 break;
+
             case 'l':
-                loginMode = LoginMode::Yes;
+                loginMode = true;
                 break;
-            case 'L':
-                loginMode = LoginMode::No;
-                break;
+
             case 'b':
                 customBackendPath = optarg;
                 if (customBackendPath.empty())
@@ -373,7 +381,7 @@ int main(int argc, char *argv[])
     for (const auto &envPair : env.pairs())
         appendWslArg(wslCmdLine, L"-e" + envPair.first + L"=" + envPair.second);
 
-    if (loginMode == LoginMode::Yes)
+    if (loginMode)
         appendWslArg(wslCmdLine, L"--login");
 
     if (!wslDir.empty())
@@ -527,6 +535,7 @@ int main(int argc, char *argv[])
             msg.append(err);
             msg.push_back('\n');
         }
+
         g_terminalState.fatal("%s", msg.c_str());
     });
 
@@ -542,5 +551,8 @@ int main(int argc, char *argv[])
     backendStarted = true;
 
     mainLoop(winDir, controlSocketC, inputSocketC, outputSocketC, initialSize);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
     return 0;
 }
