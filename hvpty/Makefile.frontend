@@ -14,11 +14,12 @@ ifdef RELEASE
 LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
-LIBS = -liphlpapi -lole32 -lws2_32
+LIBS = -liphlpapi -lole32
 BINS = \
 $(BINDIR)/GetIp.obj \
 $(BINDIR)/GetVmId.obj \
 $(BINDIR)/Helpers.obj \
+$(BINDIR)/HyperVSocket.obj \
 $(BINDIR)/hvpty.obj \
 $(BINDIR)/SocketIo.obj \
 $(BINDIR)/TerminalState.obj
@@ -34,11 +35,14 @@ $(NAME) : $(BINS)
 
 $(BINDIR)/GetIp.obj : GetIp.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
-    
+
 $(BINDIR)/GetVmId.obj : GetVmId.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/Helpers.obj : ../wslbridge/Helpers.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
+
+$(BINDIR)/HyperVSocket.obj : HyperVSocket.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/hvpty.obj : hvpty.cpp

@@ -5,7 +5,6 @@
  */
 
 #include <windows.h>
-#include <winsock.h>
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
@@ -24,21 +23,11 @@
 #include <thread>
 #include <vector>
 
-#include "../hvsocket/hvsocket.h"
+#include "HyperVSocket.hpp"
 #include "../wslbridge/Helpers.hpp"
 #include "../wslbridge/Environment.hpp"
 #include "../wslbridge/SocketIo.hpp"
 #include "../wslbridge/TerminalState.hpp"
-
-/* The range 49152–65535 contains dynamic ports */
-#define DYNAMIC_PORT_LOW 49152
-#define DYNAMIC_PORT_HIGH 65535
-#define BIND_MAX_RETRIES 10
-
-static int random_port(void)
-{
-    return rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW;
-}
 
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
@@ -48,80 +37,6 @@ HRESULT WINAPI GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
     int *WslVersion);
-
-/* return accepted client socket to receive */
-static SOCKET Initialize(unsigned int *initPort, GUID *VmId)
-{
-    int ret;
-
-    const SOCKET sServer = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
-    assert(sServer > 0);
-
-    const int optval = 1;
-    ret = setsockopt(sServer, HV_PROTOCOL_RAW, HVSOCKET_CONNECTED_SUSPEND,
-                    (const char *)&optval, sizeof optval);
-    assert(ret == 0);
-
-    struct SOCKADDR_HV addr;
-    memset(&addr, 0, sizeof addr);
-
-    addr.Family = AF_HYPERV;
-    memcpy(&addr.VmId, VmId, sizeof addr.VmId);
-    memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
-
-    /* Try to bind to a dynamic port */
-    int nretries = 0;
-    int port;
-
-    while (nretries < BIND_MAX_RETRIES)
-    {
-        port = random_port();
-        addr.ServiceId.Data1 = port;
-        ret = bind(sServer, (struct sockaddr *)&addr, sizeof addr);
-        if (ret == 0)
-            break;
-
-        nretries ++;
-    }
-
-    ret = listen(sServer, -1);
-    assert(ret == 0);
-
-    /* Return port number and socket to caller */
-    *initPort = port;
-    return sServer;
-}
-
-/* return socket and connect to random port number */
-static SOCKET create_hvsock(unsigned int randomPort, GUID *VmId)
-{
-    int ret;
-
-    const SOCKET sock = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
-    assert(sock > 0);
-
-    const int optval = 1;
-    ret = setsockopt(sock, HV_PROTOCOL_RAW, HVSOCKET_CONNECTED_SUSPEND,
-                    (const char *)&optval, sizeof optval);
-    assert(ret == 0);
-
-    const int timeout = 10 * 1000;
-    ret = setsockopt(sock, HV_PROTOCOL_RAW, HVSOCKET_CONNECT_TIMEOUT,
-                    (const char *)&timeout, sizeof timeout);
-    assert(ret == 0);
-
-    struct SOCKADDR_HV addr;
-    memset(&addr, 0, sizeof addr);
-
-    addr.Family = AF_HYPERV;
-    memcpy(&addr.VmId, VmId, sizeof addr.VmId);
-    memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
-    addr.ServiceId.Data1 = randomPort;
-    ret = connect(sock, (struct sockaddr *)&addr, sizeof addr);
-    assert(ret == 0);
-
-    return sock;
-}
 
 union IoSockets
 {
@@ -137,6 +52,7 @@ union IoSockets
 
 /* global variable */
 static union IoSockets g_ioSockets = { 0 };
+static class HyperVSocket *g_hvSock = nullptr;
 
 static void* resize_window(void *set)
 {
@@ -152,7 +68,7 @@ static void* resize_window(void *set)
 
         /* send terminal window size to control socket */
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-        send(g_ioSockets.controlSock, (char *)&winp, sizeof winp, 0);
+        g_hvSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
 
         if (IsDebugMode)
             printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
@@ -177,7 +93,7 @@ static void* send_buffer(void *param)
         {
             ret = read(STDIN_FILENO, data, sizeof data);
             if (ret > 0)
-                ret = send(g_ioSockets.inputSock, data, ret, 0);
+                ret = g_hvSock->Send(g_ioSockets.inputSock, data, ret);
             else
                 break;
         }
@@ -194,7 +110,7 @@ static void* receive_buffer(void *param)
 
     while (1)
     {
-        ret = recv(g_ioSockets.outputSock, data, sizeof data, 0);
+        ret = g_hvSock->Receive(g_ioSockets.outputSock, data, sizeof data);
         if (ret > 0)
             ret = write(STDOUT_FILENO, data, ret);
         else
@@ -236,7 +152,6 @@ static void usage(const char *prog)
     "  -e VAR=VAL        Sets VAR to VAL in the WSL environment\n"
     "  -h, --help        Show this usage information\n"
     "  -l, --login       Start a login shell\n"
-    "  -L, --no-login    Do not start a login shell\n"
     "  -u, --user WSL User Name\n"
     "                    Run as the specified user\n"
     "  -w, --windir Folder\n"
@@ -263,24 +178,21 @@ int main(int argc, char *argv[])
     srand(time(nullptr));
     int ret;
 
-    struct WSAData wdata;
-    ret = WSAStartup(MAKEWORD(2,2), &wdata);
-    assert(ret == 0);
-
-    const char shortopts[] = "+b:d:e:hlLu:w:W:";
+    const char shortopts[] = "+b:d:e:hlu:w:W:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
         { "env",           required_argument, 0, 'e' },
         { "help",          no_argument,       0, 'h' },
         { "login",         no_argument,       0, 'l' },
-        { "no-login",      no_argument,       0, 'L' },
         { "user",          required_argument, 0, 'u' },
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
         { 0,               no_argument,       0,  0  },
     };
 
+    /* WinSock is initialized here */
+    g_hvSock = new HyperVSocket();
     TerminalState termState;
     Environment env;
     std::string distroName;
@@ -288,10 +200,10 @@ int main(int argc, char *argv[])
     std::string userName;
     std::string winDir;
     std::string wslDir;
+    bool loginMode = false;
 
-    enum class LoginMode { Auto, Yes, No } loginMode = LoginMode::Auto;
     if (argv[0][0] == '-')
-        loginMode = LoginMode::Yes;
+        loginMode = true;
 
     int c = 0;
     while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
@@ -335,11 +247,7 @@ int main(int argc, char *argv[])
                 break;
 
             case 'l':
-                loginMode = LoginMode::Yes;
-                break;
-
-            case 'L':
-                loginMode = LoginMode::No;
+                loginMode = true;
                 break;
 
             case 'u':
@@ -383,7 +291,8 @@ int main(int argc, char *argv[])
         appendWslArg(wslCmdLine, L"--env");
         appendWslArg(wslCmdLine, envPair.first + L"=" + envPair.second);
     }
-    if (loginMode == LoginMode::Yes)
+
+    if (loginMode)
         appendWslArg(wslCmdLine, L"--login");
 
     if (!wslDir.empty())
@@ -402,8 +311,8 @@ int main(int argc, char *argv[])
         fatal("This is for WSL2 distributions only\n");
 
     /* Create server to receive random port number */
-    unsigned int initPort = 0;
-    const SOCKET sServer = Initialize(&initPort, &VmId);
+    const SOCKET sServer = g_hvSock->Create();
+    const int initPort = g_hvSock->Listen(sServer, &VmId);
 
     {
         std::array<wchar_t, 1024> buffer;
@@ -528,14 +437,13 @@ int main(int argc, char *argv[])
         termState.fatal("%s", msg.c_str());
     });
 
-    const SOCKET sClient = accept(sServer, NULL, NULL);
-    assert(sClient > 0);
-    closesocket(sServer);
+    const SOCKET sClient = g_hvSock->Accept(sServer);
+    g_hvSock->Close(sServer);
 
-    unsigned int randomPort = 0;
-    ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
+    int randomPort = 0;
+    ret = g_hvSock->Receive(sClient, &randomPort, sizeof randomPort);
     assert(ret > 0);
-    closesocket(sClient);
+    g_hvSock->Close(sClient);
 
     if (IsDebugMode)
     {
@@ -547,8 +455,8 @@ int main(int argc, char *argv[])
     /* Create four I/O sockets and connect with WSL server */
     for (int i = 0; i < 4; i++)
     {
-        g_ioSockets.sock[i] = create_hvsock(randomPort, &VmId);
-        assert(g_ioSockets.sock[i] > 0);
+        g_ioSockets.sock[i] = g_hvSock->Create();
+        g_hvSock->Connect(g_ioSockets.sock[i], &VmId, randomPort);
     }
 
     /* Create thread to send window size through control socket */
@@ -578,9 +486,8 @@ int main(int argc, char *argv[])
 
     /* cleanup */
     for (int i = 0; i < 4; i++)
-        closesocket(g_ioSockets.sock[i]);
+        g_hvSock->Close(g_ioSockets.sock[i]);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     termState.exitCleanly(0);
-    WSACleanup();
 }

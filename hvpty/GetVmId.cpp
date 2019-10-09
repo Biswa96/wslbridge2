@@ -122,12 +122,7 @@ HRESULT GetVmId(
     const std::wstring &DistroName,
     int *WslVersion)
 {
-    int bRes;
     HRESULT hRes;
-
-    WSADATA wsaData;
-    bRes = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    assert(bRes == 0);
 
     hRes = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     assert(hRes == 0);
@@ -197,6 +192,5 @@ Cleanup:
     if (wslSession)
         wslSession->Release();
     CoUninitialize();
-    WSACleanup();
     return hRes;
 }
