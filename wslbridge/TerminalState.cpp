@@ -9,8 +9,11 @@
 #include "SocketIo.hpp"
 #include "TerminalState.hpp"
 
-/* Advanced Programming in UNIX Environment 3rd ed. CH. 18th Terminal I/O */
-/* Put the input terminal into non-canonical mode. */
+/*
+ * Advanced Programming in UNIX Environment 3rd ed.
+ * CH. 18th Terminal I/O Section 11. Fig. 18.20.
+ * Put the input terminal into non-canonical mode.
+ */
 void TerminalState::enterRawMode()
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -27,7 +30,7 @@ void TerminalState::enterRawMode()
         else
         {
             if (tcgetattr(i, &mode_[i]) < 0)
-                fatalPerror("tcgetattr failed");
+                fatalPerror("tcgetattr");
             modeValid_[i] = true;
         }
     }
@@ -35,30 +38,49 @@ void TerminalState::enterRawMode()
     if (modeValid_[0])
     {
         struct termios termp;
-        if (tcgetattr(0, &termp) < 0)
-            fatalPerror("tcgetattr failed");
+        if (tcgetattr(STDIN_FILENO, &termp) < 0)
+            fatalPerror("tcgetattr");
 
+        /*
+         * Echo off, canonical mode off, extended input
+         * processing off, signal chars off.
+         */
         termp.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+        /*
+         * No SIGINT on BREAK, CR-to-NL off, input parity
+         * check off, don’t strip 8th bit on input, output
+         * flow control off.
+         */
         termp.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+
+        /* Clear size bits, parity checking off. */
         termp.c_cflag &= ~(CSIZE | PARENB);
+
+        /* Set 8 bits/char. */
         termp.c_cflag |= CS8;
-        termp.c_cc[VMIN] = 1;  // blocking read
+
+        /* 1 byte at a time, no timer. */
+        termp.c_cc[VMIN] = 1;
         termp.c_cc[VTIME] = 0;
-        if (tcsetattr(0, TCSAFLUSH, &termp) < 0)
-            fatalPerror("tcsetattr failed");
+
+        if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &termp) < 0)
+            fatalPerror("tcsetattr");
     }
 
     if (modeValid_[1])
     {
         struct termios termp;
-        if (tcgetattr(1, &termp) < 0)
-            fatalPerror("tcgetattr failed");
+        if (tcgetattr(STDOUT_FILENO, &termp) < 0)
+            fatalPerror("tcgetattr");
 
         termp.c_cflag &= ~(CSIZE | PARENB);
         termp.c_cflag |= CS8;
+
+        /* Output processing off. */
         termp.c_oflag &= ~OPOST;
-        if (tcsetattr(1, TCSAFLUSH, &termp) < 0)
-            fatalPerror("tcsetattr failed");
+        if (tcsetattr(STDOUT_FILENO, TCSAFLUSH, &termp) < 0)
+            fatalPerror("tcsetattr");
     }
 }
 
@@ -72,12 +94,12 @@ void TerminalState::leaveRawMode(const std::lock_guard<std::mutex> &lock)
         if (modeValid_[i])
         {
             if (tcsetattr(i, TCSAFLUSH, &mode_[i]) < 0)
-                fatalPerror("error restoring terminal mode");
+                fatalPerror("leaveRawMode");
         }
     }
 }
 
-// This function cannot be used from a signal handler.
+/* This function cannot be used from a signal handler. */
 void TerminalState::fatal(const char *fmt, ...)
 {
     va_list ap;
@@ -99,7 +121,9 @@ void TerminalState::exitCleanly(int exitStatus)
     leaveRawMode(lock);
     fflush(stdout);
     fflush(stderr);
-    // Avoid calling exit, which would call global destructors and destruct the
-    // WakeupFd object.
+    /*
+     * Avoid calling exit, which would call global destructors
+     * and destruct the WakeupFd object.
+     */
     _exit(exitStatus);
 }
