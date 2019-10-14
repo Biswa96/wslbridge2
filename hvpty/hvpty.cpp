@@ -282,7 +282,7 @@ int main(int argc, char *argv[])
 
     /* Prepare the backend command line */
     std::wstring wslCmdLine;
-    wslCmdLine.append(L"\"$(wslpath -u");
+    wslCmdLine.append(L"exec \"$(wslpath -u");
     appendWslArg(wslCmdLine, backendPathWin);
     wslCmdLine.append(L")\"");
 
