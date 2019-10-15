@@ -29,17 +29,20 @@
 #include <string>
 #include <vector>
 
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
+
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
 union IoSockets
 {
-    int sock[4];
+    int sock[3];
     struct
     {
         int inputSock;
         int outputSock;
-        int errorSock;
         int controlSock;
     };
 };
@@ -47,8 +50,6 @@ union IoSockets
 /* Return created client socket to send */
 static int ConnectHvSocket(const unsigned int initPort)
 {
-    int ret;
-
     const int cSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
     assert(cSock > 0);
 
@@ -58,14 +59,14 @@ static int ConnectHvSocket(const unsigned int initPort)
     addr.svm_family = AF_VSOCK;
     addr.svm_port = initPort;
     addr.svm_cid = VMADDR_CID_HOST;
-    ret = connect(cSock, (struct sockaddr *)&addr, sizeof addr);
-    assert(ret == 0);
+    const int connectRet = connect(cSock, (struct sockaddr *)&addr, sizeof addr);
+    assert(connectRet == 0);
 
     return cSock;
 }
 
 /* Return socket and random port number */
-static int ListenVsockAnyPort(unsigned int *randomPort)
+static int ListenVsockAnyPort(unsigned int *randomPort, const int backlog)
 {
     int ret;
 
@@ -86,7 +87,7 @@ static int ListenVsockAnyPort(unsigned int *randomPort)
     ret = getsockname(sSock, (struct sockaddr *)&addr, &addrlen);
     assert(ret == 0);
 
-    ret = listen(sSock, -1);
+    ret = listen(sSock, backlog);
     assert(ret == 0);
 
     /* Return port number and socket to caller */
@@ -194,8 +195,9 @@ int main(int argc, char *argv[])
     }
 
     /* First connect to Windows side then send random port */
+    union IoSockets ioSockets;
     const int client_sock = ConnectHvSocket(initPort);
-    const int server_sock = ListenVsockAnyPort(&randomPort);
+    const int server_sock = ListenVsockAnyPort(&randomPort, ARRAYSIZE(ioSockets.sock));
     ret = send(client_sock, &randomPort, sizeof randomPort, 0);
     assert(ret > 0);
     close(client_sock);
@@ -207,8 +209,7 @@ int main(int argc, char *argv[])
     }
 
     /* Now act as a server and accept four I/O channels */
-    union IoSockets ioSockets;
-    for (int i = 0; i < 4; i++)
+    for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
     {
         ioSockets.sock[i] = accept4(server_sock, NULL, NULL, SOCK_CLOEXEC);
         assert(ioSockets.sock[i] > 0);
@@ -295,7 +296,7 @@ int main(int argc, char *argv[])
                 if (waitpid(child, &wstatus, 0) != child)
                     perror("waitpid");
 
-                for (int i = 0; i < 4; i++)
+                for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
                     shutdown(ioSockets.sock[i], SHUT_RDWR);
                 break;
             }
@@ -373,7 +374,7 @@ int main(int argc, char *argv[])
         perror("fork");
 
     /* cleanup */
-    for (int i = 0; i < 4; i++)
+    for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
         close(ioSockets.sock[i]);
 
     return 0;

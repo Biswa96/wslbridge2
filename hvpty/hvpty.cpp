@@ -29,23 +29,26 @@
 #include "../wslbridge/SocketIo.hpp"
 #include "../wslbridge/TerminalState.hpp"
 
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
+
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
-void WINAPI GetIp(void);
-HRESULT WINAPI GetVmId(
+void GetIp(void);
+HRESULT GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
     int *WslVersion);
 
 union IoSockets
 {
-    SOCKET sock[4];
+    SOCKET sock[3];
     struct
     {
         SOCKET inputSock;
         SOCKET outputSock;
-        SOCKET errorSock;
         SOCKET controlSock;
     };
 };
@@ -312,7 +315,9 @@ int main(int argc, char *argv[])
 
     /* Create server to receive random port number */
     const SOCKET sServer = g_hvSock->Create();
-    const int initPort = g_hvSock->Listen(sServer, &VmId);
+
+    /* Listen for only one backend connection */
+    const int initPort = g_hvSock->Listen(sServer, &VmId, 1);
 
     {
         std::array<wchar_t, 1024> buffer;
@@ -358,7 +363,7 @@ int main(int argc, char *argv[])
         cmdLine.append(mbsToWcs(userName));
     }
 
-    cmdLine.append(L" /bin/sh -c ");
+    cmdLine.append(L" /bin/sh -c");
     appendWslArg(cmdLine, wslCmdLine);
 
     const struct PipeHandles outputPipe = createPipe();
@@ -453,7 +458,7 @@ int main(int argc, char *argv[])
     }
 
     /* Create four I/O sockets and connect with WSL server */
-    for (int i = 0; i < 4; i++)
+    for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
     {
         g_ioSockets.sock[i] = g_hvSock->Create();
         g_hvSock->Connect(g_ioSockets.sock[i], &VmId, randomPort);
@@ -485,7 +490,7 @@ int main(int argc, char *argv[])
     pthread_join(tidOutput, nullptr);
 
     /* cleanup */
-    for (int i = 0; i < 4; i++)
+    for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
         g_hvSock->Close(g_ioSockets.sock[i]);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);

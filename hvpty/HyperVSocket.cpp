@@ -45,9 +45,9 @@ HyperVSocket::HyperVSocket(void)
 
 HyperVSocket::~HyperVSocket(void)
 {
+    pfnWSACleanup();
     if (m_hModule)
         FreeLibrary(m_hModule);
-    pfnWSACleanup();
 }
 
 SOCKET HyperVSocket::Create(void)
@@ -98,7 +98,7 @@ void HyperVSocket::Connect(const SOCKET sock, const GUID *VmId, const int port)
     assert(connectRet == 0);
 }
 
-int HyperVSocket::Listen(const SOCKET sock, const GUID *VmId)
+int HyperVSocket::Listen(const SOCKET sock, const GUID *VmId, const int backlog)
 {
     struct SOCKADDR_HV addr = {};
     addr.Family = AF_HYPERV;
@@ -120,7 +120,7 @@ int HyperVSocket::Listen(const SOCKET sock, const GUID *VmId)
         nretries++;
     }
 
-    const int listenRet = pfnListen(sock, -1);
+    const int listenRet = pfnListen(sock, backlog);
     assert(listenRet == 0);
 
     /* Return port number to caller */

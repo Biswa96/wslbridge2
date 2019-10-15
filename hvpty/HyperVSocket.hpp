@@ -33,7 +33,7 @@ public:
     SOCKET Create(void);
     SOCKET Accept(const SOCKET sock);
     void Connect(const SOCKET sock, const GUID *VmId, const int port);
-    int Listen(const SOCKET sock, const GUID *VmId);
+    int Listen(const SOCKET sock, const GUID *VmId, const int backlog);
     int Receive(const SOCKET sock, void *buf, int len);
     int Send(const SOCKET sock, void *buf, int len);
     void Close(const SOCKET sock);

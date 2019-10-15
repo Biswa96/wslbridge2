@@ -13,7 +13,7 @@
                           GAA_FLAG_SKIP_MULTICAST | \
                           GAA_FLAG_SKIP_ANYCAST )
 
-void WINAPI GetIp(void)
+void GetIp(void)
 {
     ULONG ret, size;
     HANDLE hHeap = GetProcessHeap();
