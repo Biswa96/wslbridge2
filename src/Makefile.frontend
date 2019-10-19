@@ -20,7 +20,7 @@ $(BINDIR)/LocalSock.obj \
 $(BINDIR)/SocketIo.obj \
 $(BINDIR)/TerminalState.obj \
 $(BINDIR)/WinHelper.obj \
-$(BINDIR)/wslbridge.obj
+$(BINDIR)/wslbridge2.obj
 
 # Windows header specific options
 CCOPT = -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE
@@ -46,7 +46,7 @@ $(BINDIR)/TerminalState.obj : TerminalState.cpp
 $(BINDIR)/WinHelper.obj : WinHelper.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
-$(BINDIR)/wslbridge.obj : wslbridge.cpp
+$(BINDIR)/wslbridge2.obj : wslbridge2.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR) :

@@ -39,7 +39,7 @@ $(BINDIR)/GetIp.obj : GetIp.cpp
 $(BINDIR)/GetVmId.obj : GetVmId.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/Helpers.obj : ../wslbridge/Helpers.cpp
+$(BINDIR)/Helpers.obj : ../src/Helpers.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/HyperVSocket.obj : HyperVSocket.cpp
@@ -48,10 +48,10 @@ $(BINDIR)/HyperVSocket.obj : HyperVSocket.cpp
 $(BINDIR)/hvpty.obj : hvpty.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
-$(BINDIR)/SocketIo.obj : ../wslbridge/SocketIo.cpp
+$(BINDIR)/SocketIo.obj : ../src/SocketIo.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/TerminalState.obj : ../wslbridge/TerminalState.cpp
+$(BINDIR)/TerminalState.obj : ../src/TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR) :

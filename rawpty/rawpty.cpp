@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #include <string>
-#include "../wslbridge/TerminalState.hpp"
+#include "../src/TerminalState.hpp"
 
 #ifndef PointerToUInt
 #define PointerToUInt(x) (unsigned int)(unsigned long int)(x)

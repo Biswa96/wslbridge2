@@ -28,10 +28,10 @@ $(NAME) : $(BINS)
 $(BINDIR)/rawpty.obj : rawpty.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/SocketIo.obj : ../wslbridge/SocketIo.cpp
+$(BINDIR)/SocketIo.obj : ../src/SocketIo.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
-$(BINDIR)/TerminalState.obj : ../wslbridge/TerminalState.cpp
+$(BINDIR)/TerminalState.obj : ../src/TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR) :
