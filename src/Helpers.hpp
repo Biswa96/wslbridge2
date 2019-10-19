@@ -1,13 +1,12 @@
 /* 
- * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) 2019 Biswapriyo Nath.
  */
 
 #ifndef HELPERS_HPP
 #define HELPERS_HPP
 
-struct TermSize terminalSize(void);
 std::wstring mbsToWcs(const std::string &s);
 std::string wcsToMbs(const std::wstring &s, bool emptyOnError=false);
 std::wstring dirname(const std::wstring &path);

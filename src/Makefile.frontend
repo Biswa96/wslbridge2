@@ -1,6 +1,6 @@
-# This file is part of wslbridge2 project
-# Licensed under the GNU General Public License version 3
-# Copyright (C) 2019 Biswapriyo Nath
+# This file is part of wslbridge2 project.
+# Licensed under the terms of the GNU General Public License v3 or later.
+# Copyright (C) 2019 Biswapriyo Nath.
 
 # Makefile for wslbridge2 frontend
 
@@ -15,9 +15,9 @@ LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
 OBJS = \
+$(BINDIR)/common.obj \
 $(BINDIR)/Helpers.obj \
 $(BINDIR)/LocalSock.obj \
-$(BINDIR)/SocketIo.obj \
 $(BINDIR)/TerminalState.obj \
 $(BINDIR)/WinHelper.obj \
 $(BINDIR)/wslbridge2.obj
@@ -31,13 +31,13 @@ $(NAME) : $(OBJS)
 	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
 
+$(BINDIR)/common.obj : common.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
 $(BINDIR)/Helpers.obj : Helpers.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/LocalSock.obj : LocalSock.cpp
-	$(CXX) -c $(CFLAGS) $< -o $@
-
-$(BINDIR)/SocketIo.obj : SocketIo.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/TerminalState.obj : TerminalState.cpp

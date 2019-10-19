@@ -1,3 +1,9 @@
+/* 
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) 2019 Biswapriyo Nath.
+ */
+
 #ifndef ENVIRONMENT_HPP
 #define ENVIRONMENT_HPP
 

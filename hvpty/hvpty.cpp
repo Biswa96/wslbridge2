@@ -6,7 +6,6 @@
 
 #include <windows.h>
 #include <assert.h>
-#include <errno.h>
 #include <getopt.h>
 #include <poll.h>
 #include <pthread.h>
@@ -19,15 +18,16 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <array>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "HyperVSocket.hpp"
-#include "../wslbridge/Helpers.hpp"
-#include "../wslbridge/Environment.hpp"
-#include "../wslbridge/SocketIo.hpp"
-#include "../wslbridge/TerminalState.hpp"
+#include "../src/common.hpp"
+#include "../src/Helpers.hpp"
+#include "../src/Environment.hpp"
+#include "../src/TerminalState.hpp"
 
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
@@ -196,8 +196,8 @@ int main(int argc, char *argv[])
 
     /* WinSock is initialized here */
     g_hvSock = new HyperVSocket();
-    TerminalState termState;
     Environment env;
+    TerminalState termState;
     std::string distroName;
     std::string customBackendPath;
     std::string userName;
@@ -208,10 +208,10 @@ int main(int argc, char *argv[])
     if (argv[0][0] == '-')
         loginMode = true;
 
-    int c = 0;
-    while ((c = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
+    int ch = 0;
+    while ((ch = getopt_long(argc, argv, shortopts, longopts, nullptr)) != -1)
     {
-        switch (c)
+        switch (ch)
         {
             case 0:
                 /* Ignore long option. */
@@ -278,10 +278,9 @@ int main(int argc, char *argv[])
 
     const std::wstring wslPath = findSystemProgram(L"wsl.exe");
     const auto backendPathInfo = normalizePath(
-                    findBackendProgram(customBackendPath, L"hvpty-backend"));
+                    findBackendProgram(customBackendPath, L"wslbridge2-backend"));
     const std::wstring backendPathWin = backendPathInfo.first;
     const std::wstring fsname = backendPathInfo.second;
-    const struct TermSize initialSize = terminalSize();
 
     /* Prepare the backend command line */
     std::wstring wslCmdLine;
@@ -320,13 +319,16 @@ int main(int argc, char *argv[])
     const int initPort = g_hvSock->Listen(sServer, &VmId, 1);
 
     {
+        struct winsize winp = {};
+        ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
+
         std::array<wchar_t, 1024> buffer;
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
                 L" --cols %d --rows %d --port %d",
-                initialSize.cols,
-                initialSize.rows,
+                winp.ws_col,
+                winp.ws_row,
                 initPort);
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
@@ -451,11 +453,7 @@ int main(int argc, char *argv[])
     g_hvSock->Close(sClient);
 
     if (IsDebugMode)
-    {
-        wprintf(L"cols: %d row: %d initPort: %d randomPort: %d\n",
-                initialSize.cols, initialSize.rows, initPort, randomPort);
         wprintf(L"command: %ls\n", &cmdLine[0]);
-    }
 
     /* Create four I/O sockets and connect with WSL server */
     for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)

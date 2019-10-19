@@ -1,31 +1,20 @@
 /* 
- * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) 2019 Biswapriyo Nath.
  */
 
 #include <windows.h>
+#include <assert.h>
 #include <sys/cygwin.h>
 #include <sys/ioctl.h>
 
+#include <array>
 #include <algorithm>
+#include <string>
 #include <vector>
 
-#include "SocketIo.hpp"
-
-struct TermSize terminalSize(void)
-{
-    winsize ws = {};
-    if (isatty(STDIN_FILENO) &&
-        ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-    {
-        return TermSize { ws.ws_col, ws.ws_row };
-    }
-    else
-    {
-        return TermSize { 80, 24 };
-    }
-}
+#include "../src/common.hpp"
 
 std::wstring mbsToWcs(const std::string &s)
 {

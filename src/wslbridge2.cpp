@@ -24,9 +24,9 @@
 #include <thread>
 #include <vector>
 
+#include "common.hpp"
 #include "Helpers.hpp"
 #include "Environment.hpp"
-#include "SocketIo.hpp"
 #include "LocalSock.hpp"
 #include "TerminalState.hpp"
 #include "WinHelper.hpp"
@@ -278,7 +278,6 @@ int main(int argc, char *argv[])
                     findBackendProgram(customBackendPath, L"wslbridge2-backend"));
     const std::wstring backendPathWin = backendPathInfo.first;
     const std::wstring fsname = backendPathInfo.second;
-    const struct TermSize initialSize = terminalSize();
 
     /* Prepare the backend command line. */
     std::wstring wslCmdLine;
@@ -303,13 +302,16 @@ int main(int argc, char *argv[])
     }
 
     {
+        struct winsize winp = {};
+        ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
+
         std::array<wchar_t, 1024> buffer;
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
                 L" --cols %d --rows %d -0%d -1%d -3%d",
-                initialSize.cols,
-                initialSize.rows,
+                winp.ws_col,
+                winp.ws_row,
                 inputSocket.port(),
                 outputSocket.port(),
                 controlSocket.port());

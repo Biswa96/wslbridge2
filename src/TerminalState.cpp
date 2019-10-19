@@ -1,12 +1,16 @@
 /* 
- * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) 2019 Biswapriyo Nath.
  */
 
+#include <assert.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <termios.h>
+#include <unistd.h>
 
-#include "SocketIo.hpp"
+#include "common.hpp"
 #include "TerminalState.hpp"
 
 /*
@@ -121,9 +125,6 @@ void TerminalState::exitCleanly(int exitStatus)
     leaveRawMode(lock);
     fflush(stdout);
     fflush(stderr);
-    /*
-     * Avoid calling exit, which would call global destructors
-     * and destruct the WakeupFd object.
-     */
+    /* Avoid calling exit, which would call global destructors */
     _exit(exitStatus);
 }
