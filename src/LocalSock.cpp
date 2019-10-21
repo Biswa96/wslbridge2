@@ -1,59 +1,118 @@
 /* 
- * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) Biswapriyo Nath.
  */
 
+#include <winsock.h>
 #include <assert.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 #include "LocalSock.hpp"
 
 LocalSock::LocalSock()
 {
-    mSockFd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(mSockFd >= 0);
+    m_hModule = LoadLibraryExW(
+                L"ws2_32.dll",
+                NULL,
+                LOAD_LIBRARY_SEARCH_SYSTEM32);
+    assert(m_hModule != NULL);
 
-    const int flag = 1;
-    const int nodelayRet = setsockopt(mSockFd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof flag);
+    pfnAccept = (ACCEPTPROC)GetProcAddress(m_hModule, "accept");
+    pfnBind = (BINDPROC)GetProcAddress(m_hModule, "bind");
+    pfnCloseSocket = (CLOSESOCKETPROC)GetProcAddress(m_hModule, "closesocket");
+    pfnConnect = (CONNETCPROC)GetProcAddress(m_hModule, "connect");
+    pfnGetSockName = (GETSOCKNAMEPROC)GetProcAddress(m_hModule, "getsockname");
+    pfnListen = (LISTENPROC)GetProcAddress(m_hModule, "listen");
+    pfnRecv = (RECVPROC)GetProcAddress(m_hModule, "recv");
+    pfnSend = (SENDPROC)GetProcAddress(m_hModule, "send");
+    pfnSocket = (SOCKETPROC)GetProcAddress(m_hModule, "socket");
+    pfnSetSockOpt = (SETSOCKOPTPROC)GetProcAddress(m_hModule, "setsockopt");
+    pfnWSAStartup = (WSASTARTUPPROC)GetProcAddress(m_hModule, "WSAStartup");
+    pfnWSACleanup = (WSACLEANUPPROC)GetProcAddress(m_hModule, "WSACleanup");
+
+    struct WSAData wdata;
+    const int wsaRet = pfnWSAStartup(MAKEWORD(2,2), &wdata);
+    assert(wsaRet == 0);
+}
+
+LocalSock::~LocalSock(void)
+{
+    pfnWSACleanup();
+    if (m_hModule)
+        FreeLibrary(m_hModule);
+}
+
+SOCKET LocalSock::Create(void)
+{
+    const SOCKET sock = pfnSocket(
+                        AF_INET,
+                        SOCK_STREAM,
+                        0);
+    assert(sock > 0);
+
+    const int flag = true;
+    const int nodelayRet = pfnSetSockOpt(
+                           sock,
+                           IPPROTO_TCP,
+                           TCP_NODELAY,
+                           &flag,
+                           sizeof flag);
     assert(nodelayRet == 0);
 
+    /* Return socket to caller */
+    return sock;
+}
+
+SOCKET LocalSock::Accept(const SOCKET sock)
+{
+    const SOCKET cSock = pfnAccept(sock, NULL, NULL);
+    assert(cSock > 0);
+
+    const int flag = true;
+    const int nodelayRet = pfnSetSockOpt(
+                           cSock,
+                           IPPROTO_TCP,
+                           TCP_NODELAY,
+                           &flag,
+                           sizeof flag);
+    assert(nodelayRet == 0);
+
+    return cSock;
+}
+
+int LocalSock::Listen(const SOCKET sock, const int backlog)
+{
+    /* Bind to any available port */
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(0);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    const int bindRet = bind(mSockFd, reinterpret_cast<const sockaddr*>(&addr), sizeof addr);
+    const int bindRet = pfnBind(sock, &addr, sizeof addr);
     assert(bindRet == 0);
 
-    const int listenRet = listen(mSockFd, 1);
+    const int listenRet = pfnListen(sock, backlog);
     assert(listenRet == 0);
 
-    socklen_t addrLen = sizeof(addr);
-    const int getRet = getsockname(mSockFd, reinterpret_cast<sockaddr*>(&addr), &addrLen);
+    int addrLen = sizeof addr;
+    const int getRet = pfnGetSockName(sock, &addr, &addrLen);
     assert(getRet == 0);
 
-    mPort = ntohs(addr.sin_port);
+    /* Return port number to caller */
+    return ntohs(addr.sin_port);
 }
 
-int LocalSock::accept()
+int LocalSock::Receive(const SOCKET sock, void *buf, int len)
 {
-    const int cs = ::accept(mSockFd, nullptr, nullptr);
-    assert(cs >= 0);
-
-    const int flag = 1;
-    const int nodelayRet = setsockopt(cs, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof flag);
-    assert(nodelayRet == 0);
-
-    return cs;
+    return pfnRecv(sock, buf, len, 0);
 }
 
-void LocalSock::close()
+int LocalSock::Send(const SOCKET sock, void *buf, int len)
 {
-    if (mSockFd != -1)
-    {
-        ::close(mSockFd);
-        mSockFd = -1;
-    }
+    return pfnSend(sock, buf, len, 0);
+}
+
+void LocalSock::Close(const SOCKET sock)
+{
+    if (sock > 0)
+        pfnCloseSocket(sock);
 }

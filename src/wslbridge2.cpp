@@ -1,7 +1,7 @@
 /* 
- * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) Biswapriyo Nath.
  */
 
 #include <windows.h>
@@ -15,7 +15,6 @@
 #include <sys/cygwin.h>
 #endif
 #include <sys/ioctl.h>
-#include <sys/socket.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -51,6 +50,7 @@ union IoSockets
 
 /* global variable */
 static union IoSockets g_ioSockets = { 0 };
+static class LocalSock *g_locSock = NULL;
 
 static void* resize_window(void *set)
 {
@@ -66,7 +66,7 @@ static void* resize_window(void *set)
 
         /* Send terminal window size to control socket */
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-        send(g_ioSockets.controlSock, &winp, sizeof winp, 0);
+        g_locSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
 
         if (IsDebugMode)
             printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
@@ -91,7 +91,7 @@ static void* send_buffer(void *param)
         {
             ret = read(STDIN_FILENO, data, sizeof data);
             if (ret > 0)
-                ret = send(g_ioSockets.inputSock, data, ret, 0);
+                ret = g_locSock->Send(g_ioSockets.inputSock, data, ret);
             else
                 break;
         }
@@ -108,7 +108,7 @@ static void* receive_buffer(void *param)
 
     while (1)
     {
-        ret = recv(g_ioSockets.outputSock, data, sizeof data, 0);
+        ret = g_locSock->Receive(g_ioSockets.outputSock, data, sizeof data);
         if (ret > 0)
             ret = write(STDOUT_FILENO, data, ret);
         else
@@ -187,6 +187,8 @@ int main(int argc, char *argv[])
         { 0,               no_argument,       0,  0  },
     };
 
+    /* WinSock is initialized here */
+    g_locSock = new LocalSock();
     int ret;
     Environment env;
     TerminalState termState;
@@ -269,9 +271,9 @@ int main(int argc, char *argv[])
         }
     }
 
-    LocalSock inputSocket;
-    LocalSock outputSocket;
-    LocalSock controlSocket;
+    SOCKET inputSocket = g_locSock->Create();
+    SOCKET outputSocket = g_locSock->Create();
+    SOCKET controlSocket = g_locSock->Create();
 
     const std::wstring wslPath = findSystemProgram(L"wsl.exe");
     const auto backendPathInfo = normalizePath(
@@ -312,9 +314,9 @@ int main(int argc, char *argv[])
                 L" --cols %d --rows %d -0%d -1%d -3%d",
                 winp.ws_col,
                 winp.ws_row,
-                inputSocket.port(),
-                outputSocket.port(),
-                controlSocket.port());
+                g_locSock->Listen(inputSocket, 1),
+                g_locSock->Listen(outputSocket, 1),
+                g_locSock->Listen(controlSocket, 1));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
@@ -429,12 +431,13 @@ int main(int argc, char *argv[])
         termState.fatal("%s", msg.c_str());
     });
 
-    g_ioSockets.controlSock = controlSocket.accept();
-    g_ioSockets.inputSock = inputSocket.accept();
-    g_ioSockets.outputSock = outputSocket.accept();
-    controlSocket.close();
-    inputSocket.close();
-    outputSocket.close();
+    g_ioSockets.inputSock = g_locSock->Accept(inputSocket);
+    g_ioSockets.outputSock = g_locSock->Accept(outputSocket);
+    g_ioSockets.controlSock = g_locSock->Accept(controlSocket);
+
+    g_locSock->Close(inputSocket);
+    g_locSock->Close(outputSocket);
+    g_locSock->Close(controlSocket);
 
     /* Create thread to send window size through control socket */
     pthread_t tidResize;
@@ -461,6 +464,9 @@ int main(int argc, char *argv[])
     pthread_join(tidInput, nullptr);
     pthread_join(tidOutput, nullptr);
 
+    /* cleanup */
+    for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
+        g_locSock->Close(g_ioSockets.sock[i]);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     termState.exitCleanly(0);
