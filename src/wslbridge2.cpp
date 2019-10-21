@@ -26,31 +26,37 @@
 #include "common.hpp"
 #include "Helpers.hpp"
 #include "Environment.hpp"
-#include "LocalSock.hpp"
 #include "TerminalState.hpp"
 #include "WinHelper.hpp"
+#include "WindowsSock.hpp"
 
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
+
+void GetIp(void);
+HRESULT GetVmId(
+    GUID *LxInstanceID,
+    const std::wstring &DistroName,
+    int *WslVersion);
 
 /* Enable this to show debug information */
 static const char IsDebugMode = 0;
 
 union IoSockets
 {
-    int sock[3];
+    SOCKET sock[3];
     struct
     {
-        int inputSock;
-        int outputSock;
-        int controlSock;
+        SOCKET inputSock;
+        SOCKET outputSock;
+        SOCKET controlSock;
     };
 };
 
 /* global variable */
 static union IoSockets g_ioSockets = { 0 };
-static class LocalSock *g_locSock = NULL;
+static class WindowsSock *g_winSock = NULL;
 
 static void* resize_window(void *set)
 {
@@ -66,7 +72,7 @@ static void* resize_window(void *set)
 
         /* Send terminal window size to control socket */
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-        g_locSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
+        g_winSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
 
         if (IsDebugMode)
             printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
@@ -91,7 +97,7 @@ static void* send_buffer(void *param)
         {
             ret = read(STDIN_FILENO, data, sizeof data);
             if (ret > 0)
-                ret = g_locSock->Send(g_ioSockets.inputSock, data, ret);
+                ret = g_winSock->Send(g_ioSockets.inputSock, data, ret);
             else
                 break;
         }
@@ -108,7 +114,7 @@ static void* receive_buffer(void *param)
 
     while (1)
     {
-        ret = g_locSock->Receive(g_ioSockets.outputSock, data, sizeof data);
+        ret = g_winSock->Receive(g_ioSockets.outputSock, data, sizeof data);
         if (ret > 0)
             ret = write(STDOUT_FILENO, data, ret);
         else
@@ -167,12 +173,16 @@ static void invalid_arg(const char *arg)
 
 int main(int argc, char *argv[])
 {
+    /* Minimum requirement Windows 10 build 17763 aka. version 1809 */
     if (GetWindowsBuild() < 17763)
         fatal("Windows 10 version is older than minimal requirement.\n");
 
 #ifdef __CYGWIN__
     cygwin_internal(CW_SYNC_WINENV);
 #endif
+
+    srand(time(nullptr));
+    int ret;
 
     const char shortopts[] = "+b:d:e:hlu:w:W:";
     const struct option longopts[] = {
@@ -188,10 +198,9 @@ int main(int argc, char *argv[])
     };
 
     /* WinSock is initialized here */
-    g_locSock = new LocalSock();
-    int ret;
-    Environment env;
-    TerminalState termState;
+    g_winSock = new WindowsSock();
+    class Environment env;
+    class TerminalState termState;
     std::string distroName;
     std::string customBackendPath;
     std::string winDir;
@@ -271,10 +280,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    SOCKET inputSocket = g_locSock->Create();
-    SOCKET outputSocket = g_locSock->Create();
-    SOCKET controlSocket = g_locSock->Create();
-
     const std::wstring wslPath = findSystemProgram(L"wsl.exe");
     const auto backendPathInfo = normalizePath(
                     findBackendProgram(customBackendPath, L"wslbridge2-backend"));
@@ -303,7 +308,53 @@ int main(int argc, char *argv[])
         wslCmdLine.append(L"\"");
     }
 
+    bool wslTwo = false;
+    if (distroName.empty())
+        wslTwo = IsWslTwo(L"");
+    else
+        wslTwo = IsWslTwo(mbsToWcs(distroName));
+
+    GUID VmId;
+    SOCKET serverSock = 0;
+    SOCKET inputSocket = 0;
+    SOCKET outputSocket = 0;
+    SOCKET controlSocket = 0;
+
+    if (wslTwo)
     {
+        int WslVersion;
+        const HRESULT hRes = GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
+        if (hRes != 0)
+            fatal("GetVmId error: %s\n", formatErrorMessage(hRes).c_str());
+        if (WslVersion != 2)
+            fatal("This is for WSL2 distributions only\n");
+
+        /* Create server to receive random port number */
+        serverSock = g_winSock->CreateHvSock();
+
+        /* Listen for only one backend connection */
+        const int initPort = g_winSock->ListenHvSock(serverSock, &VmId, 1);
+
+        struct winsize winp = {};
+        ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
+
+        std::array<wchar_t, 1024> buffer;
+        ret = swprintf(
+                buffer.data(),
+                buffer.size(),
+                L" --cols %d --rows %d --port %d",
+                winp.ws_col,
+                winp.ws_row,
+                initPort);
+        assert(ret > 0);
+        wslCmdLine.append(buffer.data());
+    }
+    else
+    {
+        inputSocket = g_winSock->CreateLocSock();
+        outputSocket = g_winSock->CreateLocSock();
+        controlSocket = g_winSock->CreateLocSock();
+
         struct winsize winp = {};
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
 
@@ -314,9 +365,9 @@ int main(int argc, char *argv[])
                 L" --cols %d --rows %d -0%d -1%d -3%d",
                 winp.ws_col,
                 winp.ws_row,
-                g_locSock->Listen(inputSocket, 1),
-                g_locSock->Listen(outputSocket, 1),
-                g_locSock->Listen(controlSocket, 1));
+                g_winSock->ListenLocSock(inputSocket, 1),
+                g_winSock->ListenLocSock(outputSocket, 1),
+                g_winSock->ListenLocSock(controlSocket, 1));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
@@ -431,13 +482,33 @@ int main(int argc, char *argv[])
         termState.fatal("%s", msg.c_str());
     });
 
-    g_ioSockets.inputSock = g_locSock->Accept(inputSocket);
-    g_ioSockets.outputSock = g_locSock->Accept(outputSocket);
-    g_ioSockets.controlSock = g_locSock->Accept(controlSocket);
+    if (wslTwo)
+    {
+        const SOCKET sClient = g_winSock->AcceptHvSock(serverSock);
+        g_winSock->Close(serverSock);
 
-    g_locSock->Close(inputSocket);
-    g_locSock->Close(outputSocket);
-    g_locSock->Close(controlSocket);
+        int randomPort = 0;
+        ret = g_winSock->Receive(sClient, &randomPort, sizeof randomPort);
+        assert(ret > 0);
+        g_winSock->Close(sClient);
+
+        /* Create four I/O sockets and connect with WSL server */
+        for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
+        {
+            g_ioSockets.sock[i] = g_winSock->CreateHvSock();
+            g_winSock->ConnectHvSock(g_ioSockets.sock[i], &VmId, randomPort);
+        }
+    }
+    else
+    {
+        g_ioSockets.inputSock = g_winSock->AcceptLocSock(inputSocket);
+        g_ioSockets.outputSock = g_winSock->AcceptLocSock(outputSocket);
+        g_ioSockets.controlSock = g_winSock->AcceptLocSock(controlSocket);
+
+        g_winSock->Close(inputSocket);
+        g_winSock->Close(outputSocket);
+        g_winSock->Close(controlSocket);
+    }
 
     /* Create thread to send window size through control socket */
     pthread_t tidResize;
@@ -466,7 +537,7 @@ int main(int argc, char *argv[])
 
     /* cleanup */
     for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
-        g_locSock->Close(g_ioSockets.sock[i]);
+        g_winSock->Close(g_ioSockets.sock[i]);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     termState.exitCleanly(0);

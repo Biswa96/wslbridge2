@@ -1,6 +1,6 @@
 # This file is part of wslbridge2 project.
 # Licensed under the terms of the GNU General Public License v3 or later.
-# Copyright (C) 2019 Biswapriyo Nath.
+# Copyright (C) Biswapriyo Nath.
 
 # Makefile for wslbridge2 frontend
 
@@ -8,17 +8,21 @@ STRIP ?= strip
 NAME = wslbridge2.exe
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall
-LFLAGS = 
+LFLAGS = -pthread
 
 ifdef RELEASE
 LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
+LIBS = -liphlpapi -lole32
+
 OBJS = \
 $(BINDIR)/common.obj \
+$(BINDIR)/GetIp.obj \
+$(BINDIR)/GetVmId.obj \
 $(BINDIR)/Helpers.obj \
-$(BINDIR)/LocalSock.obj \
 $(BINDIR)/TerminalState.obj \
+$(BINDIR)/WindowsSock.obj \
 $(BINDIR)/WinHelper.obj \
 $(BINDIR)/wslbridge2.obj
 
@@ -28,10 +32,16 @@ CCOPT = -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE
 all : $(BINDIR) $(NAME)
 
 $(NAME) : $(OBJS)
-	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
+	$(CXX) $^ $(LFLAGS) $(LIBS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
 
 $(BINDIR)/common.obj : common.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/GetIp.obj : GetIp.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/GetVmId.obj : GetVmId.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/Helpers.obj : Helpers.cpp
@@ -42,6 +52,9 @@ $(BINDIR)/LocalSock.obj : LocalSock.cpp
 
 $(BINDIR)/TerminalState.obj : TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
+
+$(BINDIR)/WindowsSock.obj : WindowsSock.cpp
+	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/WinHelper.obj : WinHelper.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
