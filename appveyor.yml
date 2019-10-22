@@ -38,7 +38,6 @@ build_script:
     if ($env:APPVEYOR_JOB_NAME -eq $env:backendJob)
     {
         Get-ChildItem .\bin\wslbridge2-backend | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
-        Get-ChildItem .\bin\hvpty-backend | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
     }
 
     if ($env:APPVEYOR_JOB_NAME -ne $env:backendJob)
@@ -50,9 +49,7 @@ build_script:
         $jobToWaitId = $jobToWaitJson.jobId;
 
         Start-FileDownload "https://ci.appveyor.com/api/buildjobs/$jobToWaitId/artifacts/wslbridge2-backend"
-        Start-FileDownload "https://ci.appveyor.com/api/buildjobs/$jobToWaitId/artifacts/hvpty-backend"
         Move-Item -path .\wslbridge2-backend .\bin
-        Move-Item -path .\hvpty-backend .\bin
     }
 
 after_build:
