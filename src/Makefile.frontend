@@ -14,7 +14,10 @@ ifdef RELEASE
 LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
-LIBS = -liphlpapi -lole32
+# DO NOT REMOVE ws2_32 library. This forces linker to use Windows socket
+# instead of Cygwin POSIX socket implementation
+
+LIBS = -liphlpapi -lole32 -lws2_32
 
 OBJS = \
 $(BINDIR)/common.obj \

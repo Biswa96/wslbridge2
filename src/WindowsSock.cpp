@@ -20,51 +20,27 @@ rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW
 
 WindowsSock::WindowsSock(void)
 {
-    m_hModule = LoadLibraryExW(
-                L"ws2_32.dll",
-                NULL,
-                LOAD_LIBRARY_SEARCH_SYSTEM32);
-    assert(m_hModule != NULL);
-
-    pfnAccept = (ACCEPTPROC)GetProcAddress(m_hModule, "accept");
-    pfnBind = (BINDPROC)GetProcAddress(m_hModule, "bind");
-    pfnCloseSocket = (CLOSESOCKETPROC)GetProcAddress(m_hModule, "closesocket");
-    pfnConnect = (CONNETCPROC)GetProcAddress(m_hModule, "connect");
-    pfnGetSockName = (GETSOCKNAMEPROC)GetProcAddress(m_hModule, "getsockname");
-    pfnListen = (LISTENPROC)GetProcAddress(m_hModule, "listen");
-    pfnRecv = (RECVPROC)GetProcAddress(m_hModule, "recv");
-    pfnSend = (SENDPROC)GetProcAddress(m_hModule, "send");
-    pfnSocket = (SOCKETPROC)GetProcAddress(m_hModule, "socket");
-    pfnSetSockOpt = (SETSOCKOPTPROC)GetProcAddress(m_hModule, "setsockopt");
-    pfnWSAStartup = (WSASTARTUPPROC)GetProcAddress(m_hModule, "WSAStartup");
-    pfnWSACleanup = (WSACLEANUPPROC)GetProcAddress(m_hModule, "WSACleanup");
-
     struct WSAData wdata;
-    const int wsaRet = pfnWSAStartup(MAKEWORD(2,2), &wdata);
+    const int wsaRet = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(wsaRet == 0);
 }
 
 WindowsSock::~WindowsSock(void)
 {
-    pfnWSACleanup();
-    if (m_hModule)
-        FreeLibrary(m_hModule);
+    WSACleanup();
 }
 
 SOCKET WindowsSock::CreateHvSock(void)
 {
-    const SOCKET sock = pfnSocket(
-                        AF_HYPERV,
-                        SOCK_STREAM,
-                        HV_PROTOCOL_RAW);
+    const SOCKET sock = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
     assert(sock > 0);
 
     const int suspend = true;
-    const int suspendRet = pfnSetSockOpt(
+    const int suspendRet = setsockopt(
                            sock,
                            HV_PROTOCOL_RAW,
                            HVSOCKET_CONNECTED_SUSPEND,
-                           &suspend,
+                           (char*)&suspend,
                            sizeof suspend);
     assert(suspendRet == 0);
 
@@ -74,18 +50,15 @@ SOCKET WindowsSock::CreateHvSock(void)
 
 SOCKET WindowsSock::CreateLocSock(void)
 {
-    const SOCKET sock = pfnSocket(
-                        AF_INET,
-                        SOCK_STREAM,
-                        IPPROTO_TCP);
+    const SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     assert(sock > 0);
 
     const int flag = true;
-    const int nodelayRet = pfnSetSockOpt(
+    const int nodelayRet = setsockopt(
                            sock,
                            IPPROTO_TCP,
                            TCP_NODELAY,
-                           &flag,
+                           (char*)&flag,
                            sizeof flag);
     assert(nodelayRet == 0);
 
@@ -95,22 +68,22 @@ SOCKET WindowsSock::CreateLocSock(void)
 
 SOCKET WindowsSock::AcceptHvSock(const SOCKET sock)
 {
-    const SOCKET cSock = pfnAccept(sock, nullptr, nullptr);
+    const SOCKET cSock = accept(sock, NULL, NULL);
     assert(cSock > 0);
     return cSock;
 }
 
 SOCKET WindowsSock::AcceptLocSock(const SOCKET sock)
 {
-    const SOCKET cSock = pfnAccept(sock, NULL, NULL);
+    const SOCKET cSock = accept(sock, NULL, NULL);
     assert(cSock > 0);
 
     const int flag = true;
-    const int nodelayRet = pfnSetSockOpt(
+    const int nodelayRet = setsockopt(
                            cSock,
                            IPPROTO_TCP,
                            TCP_NODELAY,
-                           &flag,
+                           (char*)&flag,
                            sizeof flag);
     assert(nodelayRet == 0);
 
@@ -120,11 +93,11 @@ SOCKET WindowsSock::AcceptLocSock(const SOCKET sock)
 void WindowsSock::ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
 {
     const int timeout = 10 * 1000; /* Ten seconds */
-    const int timeRet = pfnSetSockOpt(
+    const int timeRet = setsockopt(
                         sock,
                         HV_PROTOCOL_RAW,
                         HVSOCKET_CONNECT_TIMEOUT,
-                        &timeout,
+                        (char*)&timeout,
                         sizeof timeout);
     assert(timeRet == 0);
 
@@ -133,7 +106,7 @@ void WindowsSock::ConnectHvSock(const SOCKET sock, const GUID *VmId, const int p
     memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
     addr.ServiceId.Data1 = port;
-    const int connectRet = pfnConnect(sock, &addr, sizeof addr);
+    const int connectRet = connect(sock, (sockaddr*)&addr, sizeof addr);
     assert(connectRet == 0);
 }
 
@@ -152,14 +125,14 @@ int WindowsSock::ListenHvSock(const SOCKET sock, const GUID *VmId, const int bac
     {
         port = RANDOMPORT();
         addr.ServiceId.Data1 = port;
-        const int bindRet = pfnBind(sock, &addr, sizeof addr);
+        const int bindRet = bind(sock, (sockaddr*)&addr, sizeof addr);
         if (bindRet == 0)
             break;
 
         nretries++;
     }
 
-    const int listenRet = pfnListen(sock, backlog);
+    const int listenRet = listen(sock, backlog);
     assert(listenRet == 0);
 
     /* Return port number to caller */
@@ -173,14 +146,14 @@ int WindowsSock::ListenLocSock(const SOCKET sock, const int backlog)
     addr.sin_family = AF_INET;
     addr.sin_port = htons(0);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    const int bindRet = pfnBind(sock, &addr, sizeof addr);
+    const int bindRet = bind(sock, (sockaddr*)&addr, sizeof addr);
     assert(bindRet == 0);
 
-    const int listenRet = pfnListen(sock, backlog);
+    const int listenRet = listen(sock, backlog);
     assert(listenRet == 0);
 
     int addrLen = sizeof addr;
-    const int getRet = pfnGetSockName(sock, &addr, &addrLen);
+    const int getRet = getsockname(sock, (sockaddr*)&addr, &addrLen);
     assert(getRet == 0);
 
     /* Return port number to caller */
@@ -189,16 +162,16 @@ int WindowsSock::ListenLocSock(const SOCKET sock, const int backlog)
 
 int WindowsSock::Receive(const SOCKET sock, void *buf, int len)
 {
-    return pfnRecv(sock, buf, len, 0);
+    return recv(sock, (char*)buf, len, 0);
 }
 
 int WindowsSock::Send(const SOCKET sock, void *buf, int len)
 {
-    return pfnSend(sock, buf, len, 0);
+    return send(sock, (char*)buf, len, 0);
 }
 
 void WindowsSock::Close(const SOCKET sock)
 {
     if (sock > 0)
-        pfnCloseSocket(sock);
+        closesocket(sock);
 }
