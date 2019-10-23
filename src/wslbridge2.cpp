@@ -161,8 +161,10 @@ static void usage(const char *prog)
     "  -w, --windir  Folder\n"
     "                Changes the working directory to Windows style path\n"
     "  -W, --wsldir  Folder\n"
-    "                Changes the working directory to Unix style path\n",
-    prog);
+    "                Changes the working directory to Unix style path\n"
+    "  -V, --wslver  1 or 2\n"
+    "                Indicates the WSL version of the selected distribution\n"
+    , prog);
     exit(0);
 }
 
@@ -184,7 +186,7 @@ int main(int argc, char *argv[])
     srand(time(nullptr));
     int ret;
 
-    const char shortopts[] = "+b:d:e:hlu:w:W:";
+    const char shortopts[] = "+b:d:e:hlu:w:W:V:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
@@ -194,6 +196,7 @@ int main(int argc, char *argv[])
         { "user",          required_argument, 0, 'u' },
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
+        { "wslver",        required_argument, 0, 'V' },
         { 0,               no_argument,       0,  0  },
     };
 
@@ -206,6 +209,7 @@ int main(int argc, char *argv[])
     std::string winDir;
     std::string wslDir;
     std::string userName;
+    int wslVer = 0;
     bool loginMode = false;
 
     if (argv[0][0] == '-')
@@ -275,6 +279,12 @@ int main(int argc, char *argv[])
                     invalid_arg("wsldir");
                 break;
 
+            case 'V':
+                wslVer = atoi(optarg);
+                if (!optarg || !*optarg)
+                    invalid_arg("wsldir");
+                break;
+
             default:
                 fatal("Try '%s --help' for more information.\n", argv[0]);
         }
@@ -308,11 +318,18 @@ int main(int argc, char *argv[])
         wslCmdLine.append(L"\"");
     }
 
+    /* Detect WSL version */
     bool wslTwo = false;
-    if (distroName.empty())
-        wslTwo = IsWslTwo(L"");
+    if (wslVer)
+        wslTwo = wslVer > 1;
     else
-        wslTwo = IsWslTwo(mbsToWcs(distroName));
+    {
+        /* Check default distribution */
+        if (distroName.empty())
+            wslTwo = IsWslTwo(L"");
+        else
+            wslTwo = IsWslTwo(mbsToWcs(distroName));
+    }
 
     GUID VmId;
     SOCKET serverSock = 0;
