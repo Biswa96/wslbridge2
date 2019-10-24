@@ -134,8 +134,7 @@ std::wstring findSystemProgram(const wchar_t *name)
 #endif
 }
 
-std::pair<std::wstring, std::wstring>
-normalizePath(const std::wstring &path)
+std::wstring normalizePath(const std::wstring &path)
 {
     const auto getFinalPathName = [&](HANDLE h) -> std::wstring {
         std::wstring ret;
@@ -166,20 +165,11 @@ normalizePath(const std::wstring &path)
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr,
         OPEN_EXISTING, 0, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        fatal("error: could not open '%s'\n", wcsToMbs(path).c_str());
-    }
 
-    auto npath = getFinalPathName(hFile);
-    std::array<wchar_t, MAX_PATH + 1> fsname;
-    fsname.back() = L'\0';
-    if (!GetVolumeInformationByHandleW(
-            hFile, nullptr, 0, nullptr, nullptr, nullptr,
-            &fsname[0], fsname.size()))
-    {
-        fsname[0] = L'\0';
-    }
+    if (hFile == INVALID_HANDLE_VALUE)
+        fatal("error: could not open '%s'\n", wcsToMbs(path).c_str());
+
+    std::wstring npath = getFinalPathName(hFile);
     CloseHandle(hFile);
 
     /*
@@ -199,7 +189,7 @@ normalizePath(const std::wstring &path)
         /* Strip off the \\\\?\\UNC\\ prefix and replace it with \\. */
         npath = L"\\\\" + npath.substr(8);
     }
-    return std::make_pair(std::move(npath), fsname.data());
+    return npath;
 }
 
 std::wstring findBackendProgram(const std::string &customBackendPath, const wchar_t *const backendName)

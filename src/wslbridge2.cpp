@@ -34,6 +34,9 @@
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
 
+#define WSL_VERSION_ONE 1
+#define WSL_VERSION_TWO 2
+
 void GetIp(void);
 HRESULT GetVmId(
     GUID *LxInstanceID,
@@ -58,28 +61,19 @@ union IoSockets
 static union IoSockets g_ioSockets = { 0 };
 static class WindowsSock *g_winSock = NULL;
 
-static void* resize_window(void *set)
+static void resize_window(int signum)
 {
-    int ret, signum;
     struct winsize winp;
 
-    while (1)
+    /* Send terminal window size to control socket */
+    ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
+    g_winSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
+
+    if (IsDebugMode)
     {
-        /* Wait for the window resize signal aka. SIGWINCH */
-        ret = sigwait((sigset_t *)set, &signum);
-        if (ret != 0 || signum != SIGWINCH)
-            break;
-
-        /* Send terminal window size to control socket */
-        ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-        g_winSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
-
-        if (IsDebugMode)
-            printf("cols: %d row: %d\n", winp.ws_col,winp.ws_row);
+        printf("cols: %d rows: %d signum: %d\n",
+        winp.ws_col, winp.ws_row, signum);
     }
-
-    pthread_exit(&ret);
-    return nullptr;
 }
 
 static void* send_buffer(void *param)
@@ -183,9 +177,13 @@ int main(int argc, char *argv[])
     cygwin_internal(CW_SYNC_WINENV);
 #endif
 
-    srand(time(nullptr));
-    int ret;
+    /* Set WSL_HOST_IP environment variable */
+    GetIp();
 
+    /* Set time as seed for generation of random port */
+    srand(time(NULL));
+
+    int ret;
     const char shortopts[] = "+b:d:e:hlu:w:W:V:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
@@ -282,7 +280,7 @@ int main(int argc, char *argv[])
             case 'V':
                 wslVer = atoi(optarg);
                 if (!optarg || !*optarg)
-                    invalid_arg("wsldir");
+                    invalid_arg("wslver");
                 break;
 
             default:
@@ -291,10 +289,8 @@ int main(int argc, char *argv[])
     }
 
     const std::wstring wslPath = findSystemProgram(L"wsl.exe");
-    const auto backendPathInfo = normalizePath(
-                    findBackendProgram(customBackendPath, L"wslbridge2-backend"));
-    const std::wstring backendPathWin = backendPathInfo.first;
-    const std::wstring fsname = backendPathInfo.second;
+    const std::wstring backendPathWin = normalizePath(
+                findBackendProgram(customBackendPath, L"wslbridge2-backend"));
 
     /* Prepare the backend command line. */
     std::wstring wslCmdLine;
@@ -321,7 +317,7 @@ int main(int argc, char *argv[])
     /* Detect WSL version */
     bool wslTwo = false;
     if (wslVer)
-        wslTwo = wslVer > 1;
+        wslTwo = wslVer > WSL_VERSION_ONE;
     else
     {
         /* Check default distribution */
@@ -343,7 +339,7 @@ int main(int argc, char *argv[])
         const HRESULT hRes = GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
         if (hRes != 0)
             fatal("GetVmId error: %s\n", formatErrorMessage(hRes).c_str());
-        if (WslVersion != 2)
+        if (WslVersion != WSL_VERSION_TWO)
             fatal("This is for WSL2 distributions only\n");
 
         /* Create server to receive random port number */
@@ -528,12 +524,10 @@ int main(int argc, char *argv[])
     }
 
     /* Create thread to send window size through control socket */
-    pthread_t tidResize;
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGWINCH);
-    pthread_sigmask(SIG_BLOCK, &set, nullptr);
-    ret = pthread_create(&tidResize, nullptr, resize_window, (void *)&set);
+    struct sigaction act = {};
+    act.sa_handler = resize_window;
+    act.sa_flags = SA_RESTART;
+    ret = sigaction(SIGWINCH, &act, NULL);
     assert(ret == 0);
 
     /* Create thread to send input buffer to input socket */
@@ -548,7 +542,6 @@ int main(int argc, char *argv[])
 
     termState.enterRawMode();
 
-    pthread_join(tidResize, nullptr);
     pthread_join(tidInput, nullptr);
     pthread_join(tidOutput, nullptr);
 

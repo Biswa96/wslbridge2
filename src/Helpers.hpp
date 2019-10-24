@@ -15,7 +15,7 @@ std::wstring getModuleFileName(HMODULE module);
 bool pathExists(const std::wstring &path);
 wchar_t lowerDrive(wchar_t ch);
 std::wstring findSystemProgram(const wchar_t *name);
-std::pair<std::wstring, std::wstring> normalizePath(const std::wstring &path);
+std::wstring normalizePath(const std::wstring &path);
 std::wstring findBackendProgram(const std::string &customBackendPath, const wchar_t *const backendName);
 void appendWslArg(std::wstring &out, const std::wstring &arg);
 std::string errorMessageToString(DWORD err);
