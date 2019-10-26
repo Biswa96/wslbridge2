@@ -43,9 +43,6 @@ HRESULT GetVmId(
     const std::wstring &DistroName,
     int *WslVersion);
 
-/* Enable this to show debug information */
-static const char IsDebugMode = 0;
-
 union IoSockets
 {
     SOCKET sock[3];
@@ -68,12 +65,6 @@ static void resize_window(int signum)
     /* Send terminal window size to control socket */
     ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
     g_winSock->Send(g_ioSockets.controlSock, &winp, sizeof winp);
-
-    if (IsDebugMode)
-    {
-        printf("cols: %d rows: %d signum: %d\n",
-        winp.ws_col, winp.ws_row, signum);
-    }
 }
 
 static void* send_buffer(void *param)
@@ -158,6 +149,7 @@ static void usage(const char *prog)
     "                Changes the working directory to Unix style path\n"
     "  -V, --wslver  1 or 2\n"
     "                Indicates the WSL version of the selected distribution\n"
+    "  -x, --xmod    Shows hidden backend window and debug output.\n"
     , prog);
     exit(0);
 }
@@ -184,7 +176,7 @@ int main(int argc, char *argv[])
     srand(time(NULL));
 
     int ret;
-    const char shortopts[] = "+b:d:e:hlu:w:W:V:";
+    const char shortopts[] = "+b:d:e:hlu:w:W:V:x";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
@@ -195,6 +187,7 @@ int main(int argc, char *argv[])
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
         { "wslver",        required_argument, 0, 'V' },
+        { "xmod",          no_argument,       0, 'x' },
         { 0,               no_argument,       0,  0  },
     };
 
@@ -208,6 +201,7 @@ int main(int argc, char *argv[])
     std::string wslDir;
     std::string userName;
     int wslVer = 0;
+    bool debugMode = false;
     bool loginMode = false;
 
     if (argv[0][0] == '-')
@@ -283,6 +277,10 @@ int main(int argc, char *argv[])
                     invalid_arg("wslver");
                 break;
 
+            case 'x':
+                debugMode = true;
+                break;
+
             default:
                 fatal("Try '%s --help' for more information.\n", argv[0]);
         }
@@ -355,7 +353,8 @@ int main(int argc, char *argv[])
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
-                L" --cols %d --rows %d --port %d",
+                L" %ls--cols %d --rows %d --port %d",
+                debugMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
                 initPort);
@@ -375,7 +374,8 @@ int main(int argc, char *argv[])
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
-                L" --cols %d --rows %d -0%d -1%d -3%d",
+                L" %ls--cols %d --rows %d -0%d -1%d -3%d",
+                debugMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
                 g_winSock->ListenLocSock(inputSocket, 1),
@@ -419,6 +419,9 @@ int main(int argc, char *argv[])
     cmdLine.append(L" /bin/sh -c");
     appendWslArg(cmdLine, wslCmdLine);
 
+    if (debugMode)
+        wprintf(L"Backend CommandLine: %ls\n", &cmdLine[0]);
+
     const struct PipeHandles outputPipe = createPipe();
     const struct PipeHandles errorPipe = createPipe();
 
@@ -440,10 +443,13 @@ int main(int argc, char *argv[])
     PROCESS_INFORMATION pi = {};
     STARTUPINFOEXW si = {};
     si.StartupInfo.cb = sizeof si;
-    si.lpAttributeList = AttrList;
-    si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
-    si.StartupInfo.hStdOutput = outputPipe.wh;
-    si.StartupInfo.hStdError = errorPipe.wh;
+    if (!debugMode)
+    {
+        si.lpAttributeList = AttrList;
+        si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+        si.StartupInfo.hStdOutput = outputPipe.wh;
+        si.StartupInfo.hStdError = errorPipe.wh;
+    }
 
     ret = CreateProcessW(
             wslPath.c_str(),
@@ -451,7 +457,7 @@ int main(int argc, char *argv[])
             NULL,
             NULL,
             TRUE,
-            IsDebugMode ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
+            debugMode ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
             NULL,
             NULL,
             &si.StartupInfo,

@@ -58,7 +58,7 @@ static int ConnectLocalSock(const int port)
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    const int connectRet = connect(sockfd, (struct sockaddr *)&addr, sizeof addr);
+    const int connectRet = connect(sockfd, (sockaddr*)&addr, sizeof addr);
     assert(connectRet == 0);
 
     return sockfd;
@@ -67,45 +67,43 @@ static int ConnectLocalSock(const int port)
 /* Return created client socket to send */
 static int ConnectHvSock(const unsigned int initPort)
 {
-    const int cSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(cSock > 0);
+    const int sockfd = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    assert(sockfd > 0);
 
     struct sockaddr_vm addr = {};
     addr.svm_family = AF_VSOCK;
     addr.svm_port = initPort;
     addr.svm_cid = VMADDR_CID_HOST;
-    const int connectRet = connect(cSock, (struct sockaddr *)&addr, sizeof addr);
+    const int connectRet = connect(sockfd, (sockaddr*)&addr, sizeof addr);
     assert(connectRet == 0);
 
-    return cSock;
+    return sockfd;
 }
 
 /* Return socket and random port number */
 static int ListenVsockAnyPort(unsigned int *randomPort, const int backlog)
 {
-    int ret;
-
-    const int sSock = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(sSock > 0);
+    const int sockfd = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    assert(sockfd > 0);
 
     /* Bind to any available port */
     struct sockaddr_vm addr = {};
     addr.svm_family = AF_VSOCK;
     addr.svm_port = VMADDR_PORT_ANY;
     addr.svm_cid = VMADDR_CID_ANY;
-    ret = bind(sSock, (struct sockaddr *)&addr, sizeof addr);
-    assert(ret == 0);
+    const int bindRet = bind(sockfd, (sockaddr*)&addr, sizeof addr);
+    assert(bindRet == 0);
 
     socklen_t addrlen = sizeof addr;
-    ret = getsockname(sSock, (struct sockaddr *)&addr, &addrlen);
-    assert(ret == 0);
+    const int getRet = getsockname(sockfd, (sockaddr*)&addr, &addrlen);
+    assert(getRet == 0);
 
-    ret = listen(sSock, backlog);
-    assert(ret == 0);
+    const int listenRet = listen(sockfd, backlog);
+    assert(listenRet == 0);
 
     /* Return port number and socket to caller */
     *randomPort = addr.svm_port;
-    return sSock;
+    return sockfd;
 }
 
 /* Set custom environment variables, not so important */
@@ -254,10 +252,7 @@ int main(int argc, char *argv[])
         {
             printf(
             "cols: %d rows: %d initPort: %d randomPort: %d\n",
-            winp.ws_col,
-            winp.ws_row,
-            initPort,
-            randomPort);
+            winp.ws_col, winp.ws_row, initPort, randomPort);
         }
     }
     else /* WSL1 */
@@ -270,18 +265,14 @@ int main(int argc, char *argv[])
         {
             printf(
             "cols: %d rows: %d in: %d out: %d con: %d\n",
-            winp.ws_col,
-            winp.ws_row,
-            inputPort,
-            outputPort,
-            controlPort);
+            winp.ws_col, winp.ws_row, inputPort, outputPort, controlPort);
         }
     }
 
     int mfd;
     char ptyname[16];
     const pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
-    if (debugMode)
+    if (child > 0 && debugMode)
     {
         printf(
         "master fd: %d child pid: %d pty name: %s\n",
@@ -314,7 +305,7 @@ int main(int argc, char *argv[])
 
         do
         {
-            ret = poll(fds, (sizeof fds / sizeof fds[0]), -1);
+            ret = poll(fds, ARRAYSIZE(fds), -1);
             assert(ret > 0);
 
             /* Receive input buffer and write it to master */
