@@ -1,7 +1,7 @@
 <!--
- * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * This file is part of wslbridge2 project.
+ * Licensed under the terms of the GNU General Public License v3 or later.
+ * Copyright (C) Biswapriyo Nath.
  *
  * README.md: Main README file for wslbridge2 project
 -->
@@ -11,8 +11,8 @@
 [![Licence](https://img.shields.io/github/license/Biswa96/wslbridge2.svg?style=flat-square)][1]&nbsp;&nbsp;&nbsp;
 [![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg?style=flat-square)][2]&nbsp;&nbsp;&nbsp;
 [![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg?style=flat-square)]()&nbsp;&nbsp;&nbsp;
-[![GitHub release](https://img.shields.io/github/release/Biswa96/wslbridge2.svg?style=flat-square)]()&nbsp;&nbsp;&nbsp;
-[![Appveyor Build](https://img.shields.io/appveyor/ci/Biswa96/wslbridge2.svg?style=flat-square)]()&nbsp;&nbsp;&nbsp;
+[![GitHub release](https://img.shields.io/github/release/Biswa96/wslbridge2.svg?style=flat-square)][3]&nbsp;&nbsp;&nbsp;
+[![Appveyor Build](https://img.shields.io/appveyor/ci/Biswa96/wslbridge2.svg?style=flat-square)][4]&nbsp;&nbsp;&nbsp;
 
 Explore various ways to connect Windows Subsystem for Linux (WSL) with
 Windows terminal emulators and command line programs.
@@ -28,25 +28,17 @@ Windows terminal emulators and command line programs.
 
 ## How to build
 
-Clone this git repository. Run `make` in cygwin and WSL to make all binaries.
-To build individual programs, go to that corresponding folder and run `make`
-command with the corresponding Makefile. By default `make` command will create
-dynamically linked executables. For static liked binaries use `make RELEASE=1`
-command. All binaries will be saved in `bin` folder.
+Clone this git repository. Run `make` in cygwin (or msys2) and WSL to make all.
+To build individual programs, go to `src` folder and run `make` command with
+the corresponding Makefile. By default `make` command will create dynamically
+linked executables. For static liked binaries use `make RELEASE=1` command.
+All binaries will be placed in `bin` folder.
 
 
 ## How to use
 
-Download the released stable binaries from [Release page]. Or to test unstable
-nightly builds, go to [Appveyor project] and download the 7zip artifact.
-
-[Release page]: https://github.com/Biswa96/wslbridge2/releases
-[Appveyor project]: https://ci.appveyor.com/project/Biswa96/wslbridge2
-
-
-### hvpty: connect WSL2 with AF_HYPERV sockets
-
-Place `hvpty.exe` and `hvpty-backend` in same Windows folder. Run `hvpty.exe`.
+Download the released stable binaries from [Release page][3]. Or to test
+nightly builds, download the wslbridge2.7z from this [Appveyor project link][5].
 
 ### hvsocket: sample C code using Hyper-V sockets
 
@@ -60,16 +52,15 @@ the `wsl_` part in WSL. Run the server part first. It will wait for the client.
 Run `rawpty.exe wsl.exe` command. This can also be any Windows console program.
 See the sample [screenshot](images/Headless_Mode.PNG) without headless mode.
 
-### wslbridge2: connect WSL1 with AF_INET sockets
+### wslbridge2: connect with WSL using network sockets
 
 Place `wslbridge2.exe` and `wslbridge2-backend` in same Windows folder.
 Run `wslbridge2.exe`.
 
 ### Options
 
-Running `wslbridge2.exe` and `hvpty.exe` will open default WSL distribution.
-Make sure the WSL version matches with the executable name as stated above.
-Options are similar for both WSL1 and WSL2 binaries. Here are the options:
+Running `wslbridge2.exe` will open default shell in default WSL distribution.
+Here are the list of valid options:
 
 * `-b` or `--backend`: Overrides the default path of backend binaries.
 * `-d` or `--distribution`: Run the specified distribution.
@@ -79,6 +70,8 @@ Options are similar for both WSL1 and WSL2 binaries. Here are the options:
 * `-u` or `--user`: Run as the specified user in WSL.
 * `-w` or `--windir`: Changes the working directory to a Windows path.
 * `-W` or `--wsldir`: Changes the working directory to WSL path.
+* `-V` or `--wslver`: Indicates the WSL version of the selected distribution.
+* `-x` or `--xmod`: Shows hidden backend window and debug output.
 
 Always use single quote or double quote to mention any folder path. For paths
 in WSL, `"~"` can also be used for user's home folder. If no command line is
@@ -87,9 +80,9 @@ executed as is. For example, `wslbridge2.exe ls` will execute `ls` command
 in current working directory in default WSL distribution.
 
 
-## For Developers
+## Frequently Asked Questions
 
-See [Developers page](DEVELOP.md) for further details.
+See the [FAQ page](FAQ.md) for the answers to commonly asked questions.
 
 
 ## Caveats
@@ -98,29 +91,27 @@ See [Developers page](DEVELOP.md) for further details.
 between Windows and WSL side programs.
 
 * There is no documented way to get VM ID from WSL2 Linux VM. See this
-[issue](https://github.com/microsoft/WSL/issues/4131). Hence `hvpty` may change
-in future Windows 10 releases due to usage of undocumented COM methods.
+[issue](https://github.com/microsoft/WSL/issues/4131). Hence `GetVmId.cpp` will
+change in future Windows 10 releases due to usage of undocumented COM methods.
 
 
 ## Further Readings
 
-  - [Make your own integration services][3]
-  - [Linux kernel: af_vsock.c][4]
-  - [Linux kernel: vm_sockets.h][5]
-  - [VMWare: VMCI Socket Programming Guide][6]
-  - [man7: vsock(7)][7]
-  - [wslbridge][8]
-  - [win32-console-docs](https://github.com/rprichard/win32-console-docs)
-  - [XConPty](https://github.com/Biswa96/XConPty)
+  - [Make your own integration services][6]
+  - [Linux kernel: af_vsock.c][7]
+  - [Linux kernel: vm_sockets.h][8]
+  - [VMWare: VMCI Socket Programming Guide][9]
+  - [man7: vsock(7)][10]
+  - [wslbridge][11]
+  - [win32-console-docs][12]
+  - [XConPty][13]
 
 
 ## Acknowledgments
 
-This is based on the Ryan Prichard's (@rprichard) [wslbridge][8] project.
-Also thanks to @mintty, @therealkenc, @dxhisboy and all other [contributors]
+This is based on the Ryan Prichard's (@rprichard) [wslbridge][11] project.
+Also thanks to @mintty, @therealkenc, @dxhisboy and all [contributors][14]
 for helping with this project.
-
-[contributors]: https://github.com/Biswa96/wslbridge2/graphs/contributors
 
 
 ## Contributions
@@ -142,7 +133,7 @@ wslbridge2 is licensed under the GNU General Public License v3.
 A full copy of the license is provided in [LICENSE](LICENSE).
 
     wslbridge2 -- Explore various ways to connect WSL with Windows terminal emulators.
-    Copyright (C) 2019 Biswapriyo Nath
+    Copyright (C) Biswapriyo Nath
     
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -159,11 +150,17 @@ A full copy of the license is provided in [LICENSE](LICENSE).
 
 <!-- Links -->
 
-[1]: https://www.gnu.org/licenses/gpl-3.0.en.html
+[1]: LICENSE
 [2]: https://github.com/Biswa96/wslbridge2.git
-[3]: https://docs.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/make-integration-service
-[4]: https://github.com/torvalds/linux/blob/master/net/vmw_vsock/af_vsock.c
-[5]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/vm_sockets.h
-[6]: https://www.vmware.com/support/developer/vmci-sdk/
-[7]: http://man7.org/linux/man-pages/man7/vsock.7.html
-[8]: https://github.com/rprichard/wslbridge.git
+[3]: https://github.com/Biswa96/wslbridge2/releases
+[4]: https://ci.appveyor.com/project/Biswa96/wslbridge2
+[5]: https://ci.appveyor.com/api/projects/Biswa96/wslbridge2/artifacts/wslbridge2.7z?branch=master&job=Image%3A%20Visual%20Studio%202017
+[6]: https://docs.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/make-integration-service
+[7]: https://github.com/torvalds/linux/blob/master/net/vmw_vsock/af_vsock.c
+[8]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/vm_sockets.h
+[9]: https://www.vmware.com/support/developer/vmci-sdk/
+[10]: http://man7.org/linux/man-pages/man7/vsock.7.html
+[11]: https://github.com/rprichard/wslbridge.git
+[12]: https://github.com/rprichard/win32-console-docs.git
+[13]: https://github.com/Biswa96/XConPty.git
+[14]: https://github.com/Biswa96/wslbridge2/graphs/contributors
