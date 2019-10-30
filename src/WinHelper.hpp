@@ -13,5 +13,6 @@
 
 bool IsWslTwo(std::wstring DistroName);
 DWORD GetWindowsBuild(void);
+void GetIp(void);
 
 #endif /* WINHELPER_HPP */
