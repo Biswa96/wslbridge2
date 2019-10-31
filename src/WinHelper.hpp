@@ -11,6 +11,7 @@
 #ifndef WINHELPER_HPP
 #define WINHELPER_HPP
 
+std::string GetErrorMessage(DWORD MessageId);
 bool IsWslTwo(std::wstring DistroName);
 DWORD GetWindowsBuild(void);
 void GetIp(void);

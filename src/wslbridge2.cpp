@@ -37,7 +37,6 @@
 #define WSL_VERSION_ONE 1
 #define WSL_VERSION_TWO 2
 
-void GetIp(void);
 HRESULT GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
@@ -336,7 +335,7 @@ int main(int argc, char *argv[])
         int WslVersion;
         const HRESULT hRes = GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
         if (hRes != 0)
-            fatal("GetVmId error: %s\n", formatErrorMessage(hRes).c_str());
+            fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
         if (WslVersion != WSL_VERSION_TWO)
             fatal("This is for WSL2 distributions only\n");
 
@@ -463,16 +462,14 @@ int main(int argc, char *argv[])
             &si.StartupInfo,
             &pi);
     if (!ret)
-    {
-        fatal("error starting wsl.exe adapter: %s\n",
-            formatErrorMessage(GetLastError()).c_str());
-    }
+        fatal("CreateProcessW: %s", GetErrorMessage(GetLastError()).c_str());
 
     HeapFree(GetProcessHeap(), 0, AttrList);
     CloseHandle(outputPipe.wh);
     CloseHandle(errorPipe.wh);
     ret = SetHandleInformation(pi.hProcess, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-    assert(ret && "SetHandleInformation failed");
+    if (!ret)
+        fatal("SetHandleInformation: %s", GetErrorMessage(GetLastError()).c_str());
 
     const auto watchdog = std::thread([&]() {
         WaitForSingleObject(pi.hProcess, INFINITE);
@@ -483,19 +480,15 @@ int main(int argc, char *argv[])
         memcpy(&outWide[0], outVec.data(), outWide.size() * sizeof(wchar_t));
         std::string out { wcsToMbs(outWide, true) };
         std::string err { errVec.begin(), errVec.end() };
-        out = stripTrailing(replaceAll(out, "Press any key to continue...", ""));
-        err = stripTrailing(err);
 
         std::string msg;
         if (!out.empty()) {
             msg.append("note: wsl.exe output: ");
             msg.append(out);
-            msg.push_back('\n');
         }
         if (!err.empty()) {
             msg.append("note: backend error output: ");
             msg.append(err);
-            msg.push_back('\n');
         }
 
         termState.fatal("%s", msg.c_str());

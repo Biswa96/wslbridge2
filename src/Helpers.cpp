@@ -55,25 +55,11 @@ std::wstring dirname(const std::wstring &path)
         return path.substr(0, pos);
 }
 
-HMODULE getCurrentModule(void)
-{
-    HMODULE module;
-    if (!GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                reinterpret_cast<LPCWSTR>(getCurrentModule),
-                &module))
-    {
-        fatal("error: GetModuleHandleEx failed\n");
-    }
-    return module;
-}
-
-std::wstring getModuleFileName(HMODULE module)
+std::wstring getModuleFileName(void)
 {
     const int bufsize = 4096;
     wchar_t path[bufsize];
-    int size = GetModuleFileNameW(module, path, bufsize);
+    int size = GetModuleFileNameW(NULL, path, bufsize);
     assert(size != 0 && size != bufsize);
     return std::wstring(path);
 }
@@ -207,7 +193,7 @@ std::wstring findBackendProgram(const std::string &customBackendPath, const wcha
     }
     else
     {
-        std::wstring progDir = dirname(getModuleFileName(getCurrentModule()));
+        std::wstring progDir = dirname(getModuleFileName());
         ret = progDir + L"\\" + backendName;
     }
 
@@ -289,58 +275,6 @@ void appendWslArg(std::wstring &out, const std::wstring &arg)
     enterQuote(false);
 }
 
-std::string errorMessageToString(DWORD err)
-{
-    /*
-     *Use FormatMessageW rather than FormatMessageA, because we want to use
-     * wcstombs to convert to the Cygwin locale, which might not match the
-     * codepage FormatMessageA would use.  We need to convert using wcstombs,
-     * rather than print using %ls, because %ls doesn't work in the original
-     * MSYS.
-     */
-    wchar_t *wideMsgPtr = NULL;
-    const DWORD formatRet = FormatMessageW(
-                FORMAT_MESSAGE_FROM_SYSTEM |
-                FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL,
-                err,
-                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                reinterpret_cast<wchar_t*>(&wideMsgPtr),
-                0,
-                NULL);
-    if (formatRet == 0 || wideMsgPtr == NULL)
-        return std::string();
-
-    std::string msg = wcsToMbs(wideMsgPtr);
-    LocalFree(wideMsgPtr);
-    const size_t pos = msg.find_last_not_of(" \r\n\t");
-    if (pos == std::string::npos)
-        msg.clear();
-    else
-        msg.erase(pos + 1);
-
-    return msg;
-}
-
-std::string formatErrorMessage(DWORD err)
-{
-    char buf[64];
-    sprintf(buf, "error %#x", static_cast<unsigned int>(err));
-    std::string ret = errorMessageToString(err);
-    if (ret.empty())
-    {
-        ret += buf;
-    }
-    else
-    {
-        ret += " (";
-        ret += buf;
-        ret += ")";
-    }
-    return ret;
-}
-
 std::vector<char> readAllFromHandle(HANDLE h)
 {
     std::vector<char> ret;
@@ -351,24 +285,4 @@ std::vector<char> readAllFromHandle(HANDLE h)
         ret.insert(ret.end(), buf, buf + actual);
     }
     return ret;
-}
-
-std::string replaceAll(std::string str, const std::string &from, const std::string &to)
-{
-    size_t pos {};
-    while ((pos = str.find(from, pos)) != std::string::npos)
-    {
-        str = str.replace(pos, from.size(), to);
-        pos += to.size();
-    }
-    return str;
-}
-
-std::string stripTrailing(std::string str)
-{
-    while (!str.empty() && isspace(str.back()))
-    {
-        str.pop_back();
-    }
-    return str;
 }

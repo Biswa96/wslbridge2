@@ -15,6 +15,10 @@
 #include <wchar.h>
 
 #include <string>
+#include <vector>
+
+#include "common.hpp"
+#include "Helpers.hpp"
 
 #ifndef WSL_DISTRIBUTION_FLAGS_VALID
 
@@ -39,6 +43,34 @@ typedef HRESULT (WINAPI *GETDISTROCONFIGPROC)(
 
 typedef void (WINAPI *RTLGETVERSIONPROC)(
     OSVERSIONINFOW *lpVersionInformation);
+
+std::string GetErrorMessage(DWORD MessageId)
+{
+    wchar_t *Buffer = NULL;
+    const DWORD formatRet = FormatMessageW(
+                            FORMAT_MESSAGE_FROM_SYSTEM |
+                            FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                            FORMAT_MESSAGE_IGNORE_INSERTS,
+                            NULL,
+                            MessageId,
+                            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                            (PWSTR)&Buffer,
+                            0,
+                            NULL);
+
+    std::string msg;
+    if (formatRet == 0 || Buffer == NULL)
+    {
+        char buf[64];
+        sprintf(buf, "(%#x)", (unsigned int)MessageId);
+        msg = buf;
+    }
+    else
+        msg = wcsToMbs(Buffer);
+    LocalFree(Buffer);
+
+    return msg;
+}
 
 static std::wstring GetDefaultDistribution(void)
 {
@@ -108,7 +140,9 @@ bool IsWslTwo(std::wstring DistroName)
     char* variable;
     HRESULT hRes = pfnGetDistroConfig(DistroName.c_str(),
                 &version, &uid, &flag, &variable, &count);
-    assert(hRes == 0);
+    if (hRes != 0)
+        fatal("WslGetDistributionConfiguration: %s", GetErrorMessage(hRes).c_str());
+
     FreeLibrary(hMod);
 
     if (flag > WSL_DISTRIBUTION_FLAGS_DEFAULT)
@@ -145,9 +179,9 @@ void GetIp(void)
                   GAA_FLAG_SKIP_ANYCAST;
     HANDLE hHeap = GetProcessHeap();
 
-    ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_CUSTOM, NULL, NULL, &size);
+    ret = GetAdaptersAddresses(AF_UNSPEC, Flags, NULL, NULL, &size);
     auto adpAddr = (PIP_ADAPTER_ADDRESSES)HeapAlloc(hHeap, 0, size);
-    ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_CUSTOM, NULL, adpAddr, &size);
+    ret = GetAdaptersAddresses(AF_UNSPEC, Flags, NULL, adpAddr, &size);
 
     if (ret == 0)
     {
@@ -179,7 +213,7 @@ void GetIp(void)
                     }
                 }
                 else
-                    fprintf(stderr, "GetAdaptersInfo error %d\n", ret);
+                    fprintf(stderr, "GetAdaptersInfo: %s", GetErrorMessage(ret).c_str());
 
                 HeapFree(hHeap, 0, adpInfo);
 
@@ -190,7 +224,7 @@ void GetIp(void)
         }
     }
     else
-        fprintf(stderr, "GetAdaptersAddresses error %d\n", ret);
+        fprintf(stderr, "GetAdaptersAddresses: %s", GetErrorMessage(ret).c_str());
 
     HeapFree(hHeap, 0, adpAddr);
 }
