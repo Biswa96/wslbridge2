@@ -18,19 +18,19 @@
 #define RANDOMPORT() \
 rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW
 
-WindowsSock::WindowsSock(void)
+void WindowsSock_ctor(void)
 {
     struct WSAData wdata;
     const int wsaRet = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(wsaRet == 0);
 }
 
-WindowsSock::~WindowsSock(void)
+void WindowsSock_dtor(void)
 {
     WSACleanup();
 }
 
-SOCKET WindowsSock::CreateHvSock(void)
+SOCKET CreateHvSock(void)
 {
     const SOCKET sock = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
     assert(sock > 0);
@@ -48,7 +48,7 @@ SOCKET WindowsSock::CreateHvSock(void)
     return sock;
 }
 
-SOCKET WindowsSock::CreateLocSock(void)
+SOCKET CreateLocSock(void)
 {
     const SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     assert(sock > 0);
@@ -66,14 +66,14 @@ SOCKET WindowsSock::CreateLocSock(void)
     return sock;
 }
 
-SOCKET WindowsSock::AcceptHvSock(const SOCKET sock)
+SOCKET AcceptHvSock(const SOCKET sock)
 {
     const SOCKET cSock = accept(sock, NULL, NULL);
     assert(cSock > 0);
     return cSock;
 }
 
-SOCKET WindowsSock::AcceptLocSock(const SOCKET sock)
+SOCKET AcceptLocSock(const SOCKET sock)
 {
     const SOCKET cSock = accept(sock, NULL, NULL);
     assert(cSock > 0);
@@ -90,7 +90,7 @@ SOCKET WindowsSock::AcceptLocSock(const SOCKET sock)
     return cSock;
 }
 
-void WindowsSock::ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
+void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
 {
     const int timeout = 10 * 1000; /* Ten seconds */
     const int timeRet = setsockopt(
@@ -110,7 +110,7 @@ void WindowsSock::ConnectHvSock(const SOCKET sock, const GUID *VmId, const int p
     assert(connectRet == 0);
 }
 
-int WindowsSock::ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog)
+int ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog)
 {
     struct SOCKADDR_HV addr = {};
     addr.Family = AF_HYPERV;
@@ -139,7 +139,7 @@ int WindowsSock::ListenHvSock(const SOCKET sock, const GUID *VmId, const int bac
     return port;
 }
 
-int WindowsSock::ListenLocSock(const SOCKET sock, const int backlog)
+int ListenLocSock(const SOCKET sock, const int backlog)
 {
     /* Bind to any available port */
     sockaddr_in addr = {};
@@ -160,17 +160,17 @@ int WindowsSock::ListenLocSock(const SOCKET sock, const int backlog)
     return ntohs(addr.sin_port);
 }
 
-int WindowsSock::Receive(const SOCKET sock, void *buf, int len)
+int WindowsSock_Recv(const SOCKET sock, void *buf, int len)
 {
     return recv(sock, (char*)buf, len, 0);
 }
 
-int WindowsSock::Send(const SOCKET sock, void *buf, int len)
+int WindowsSock_Send(const SOCKET sock, void *buf, int len)
 {
     return send(sock, (char*)buf, len, 0);
 }
 
-void WindowsSock::Close(const SOCKET sock)
+void WindowsSock_Close(const SOCKET sock)
 {
     if (sock > 0)
         closesocket(sock);
