@@ -11,7 +11,7 @@
 ## Terms used:
 
 Some familiarity with the working principle of ssh and telnet will be useful.
-See this beautiful scheme on [how sshd works] in Unix & Linux Stack Exchange.
+See this beautiful scheme on [how SSH works][1] in Unix & Linux Stack Exchange.
 Please be familiar with these following terms used in this project.
 
 * frontend - wslbridge2.exe Windows executable PE binary.
@@ -70,14 +70,26 @@ tl;dr, three sockets, one port.
 
 **Q4: How to get Windows IP address in WSL2 quickly?**
 
-**A4:** tl;dr, Run `wslbridge2.exe -e WSL_HOST_IP` command. Windows 10 IPv4
-address will be accessed from `WSL_HOST_IP` environment variable and WSL2 IPv4
-address from `WSL_GUEST_IP`. e.g. for GUI programs, use
-`export DISPLAY=$WSL_HOST_IP:0`.
+**A4:** Run `wslbridge2.exe -e WSL_HOST_IP` command. Windows 10 IPv4 address
+will be accessed from `WSL_HOST_IP` environment variable and WSL2 IPv4 address
+from `WSL_GUEST_IP`. e.g. for GUI programs, use `export DISPLAY=$WSL_HOST_IP:0`.
+
+------
+
+**Q5: What are the error code starting with 0x8?**
+
+**A5:** Generally the [system error codes][3] are translated into error
+messages and shown in output. But there are some custom HRESULT values that
+are returned from WSL APIs and Lxss COM methods. Here are some of those
+HRESULT values and their meanings (copied form wsl.exe output):
+
+  * 0x80040302 - There is no distribution with the supplied name.
+  * 0x80040304 - The Legacy distribution does not support WSL2.
+  * 0x80040308 - User not found.
 
 
 <!-- Links -->
 
 [1]: https://unix.stackexchange.com/a/158604/336403/
 [2]: https://github.com/mintty/mintty/issues/921
-
+[3]: https://docs.microsoft.com/en-us/windows/win32/debug/system-error-codes
