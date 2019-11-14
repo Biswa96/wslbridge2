@@ -30,6 +30,7 @@ before_build:
     make -s RELEASE=1
 
 - cmd: |
+    C:\cygwin64\setup-x86_64.exe -d -g -n -N -X -q > NUL
     set PATH=C:\cygwin64;C:\cygwin64\bin;C:\cygwin64\usr\bin;%PATH%
     make -s RELEASE=1
 
@@ -55,7 +56,7 @@ build_script:
 after_build:
 - cmd: |
     dir /b bin
-    7z a -mx9 wslbridge2 bin\ > NUL 2>&1
+    7z a -mx9 wslbridge2 bin\ > NUL
 
 artifacts:
   - path: wslbridge2.7z
