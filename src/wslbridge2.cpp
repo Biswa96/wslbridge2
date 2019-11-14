@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "common.hpp"
+#include "GetVmId.hpp"
 #include "Helpers.hpp"
 #include "Environment.hpp"
 #include "TerminalState.hpp"
@@ -33,9 +34,6 @@
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
-
-#define WSL_VERSION_ONE 1
-#define WSL_VERSION_TWO 2
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,11 +47,6 @@ WINBASEAPI int WINAPI WSACleanup(void);
 #ifdef __cplusplus
 }
 #endif
-
-HRESULT GetVmId(
-    GUID *LxInstanceID,
-    const std::wstring &DistroName,
-    int *WslVersion);
 
 union IoSockets
 {

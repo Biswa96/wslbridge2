@@ -1,42 +1,23 @@
 /* 
  * This file is part of wslbridge2 project
  * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * Copyright (C) Biswapriyo Nath
  */
 
-#include <winsock2.h>
+/*
+ * GetVmId.cpp: Get GUID of WSL2 Utility VM with LxssUserSession COM interface.
+ */
+
 #include <windows.h>
-#include <winternl.h>
+#include <winternl.h> /* TEB, PEB, ConsoleHandle */
 #include <assert.h>
 #include <string>
 
-struct RTL_USER_PROCESS_PARAMETERS_mod
-{
-    ULONG MaximumLength;
-    ULONG Length;
-    ULONG Flags;
-    ULONG DebugFlags;
-    HANDLE ConsoleHandle;
-    /* Removed unused members */
-};
+#include "GetVmId.hpp"
 
-struct PEB_mod
-{
-    BYTE Reserved1[2];
-    BYTE BeingDebugged;
-    BYTE Reserved2[1];
-    PVOID Reserved3[2];
-    PPEB_LDR_DATA Ldr;
-    struct RTL_USER_PROCESS_PARAMETERS_mod *ProcessParameters;
-    /* Removed unused members */
-};
-
-struct TEB_mod
-{
-    PVOID Reserved1[12];
-    struct PEB_mod *ProcessEnvironmentBlock;
-    /* Removed unused members */
-};
+#ifndef SOCKET
+#define SOCKET size_t
+#endif
 
 static const GUID CLSID_LxssUserSession = {
     0x4F476546,
@@ -153,13 +134,13 @@ HRESULT GetVmId(
        /* StdHandles member must be zero */
         LXSS_STD_HANDLES StdHandles = { 0 };
         GUID InitiatedDistroID;
-        HANDLE ConsoleHandle, LxProcessHandle, ServerHandle;
+        HANDLE LxProcessHandle, ServerHandle;
         SOCKET SockIn, SockOut, SockErr, ServerSocket;
 
-        /* Black magic due to absence of appropriate header */
-        auto teb = (struct TEB_mod *)NtCurrentTeb();
-        ConsoleHandle = teb->ProcessEnvironmentBlock->
-                        ProcessParameters->ConsoleHandle;
+        const HANDLE ConsoleHandle = NtCurrentTeb()->
+                                    ProcessEnvironmentBlock->
+                                    ProcessParameters->
+                                    Reserved2[0];
 
         hRes = wslSession->CreateLxProcess(
             &DistroId,
@@ -182,10 +163,11 @@ HRESULT GetVmId(
             goto Cleanup;
         }
 
+        /* ServerHandle and ServerSocket are exclusive */
         if (ServerHandle == nullptr && ServerSocket != 0)
-            *WslVersion = 2;
+            *WslVersion = WSL_VERSION_TWO;
         else
-            *WslVersion = 1;
+            *WslVersion = WSL_VERSION_ONE;
     }
 
 Cleanup:
