@@ -37,6 +37,19 @@
 #define WSL_VERSION_ONE 1
 #define WSL_VERSION_TWO 2
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+WINBASEAPI int WINAPI closesocket(SOCKET s);
+WINBASEAPI int WINAPI recv(SOCKET s, void *buf, int len, int flags);
+WINBASEAPI int WINAPI send(SOCKET s, void *buf, int len, int flags);
+WINBASEAPI int WINAPI WSACleanup(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 HRESULT GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
@@ -62,7 +75,7 @@ static void resize_window(int signum)
 
     /* Send terminal window size to control socket */
     ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-    WindowsSock_Send(g_ioSockets.controlSock, &winp, sizeof winp);
+    send(g_ioSockets.controlSock, &winp, sizeof winp, 0);
 }
 
 static void* send_buffer(void *param)
@@ -80,7 +93,7 @@ static void* send_buffer(void *param)
         {
             ret = read(STDIN_FILENO, data, sizeof data);
             if (ret > 0)
-                ret = WindowsSock_Send(g_ioSockets.inputSock, data, ret);
+                ret = send(g_ioSockets.inputSock, data, ret, 0);
             else
                 break;
         }
@@ -97,7 +110,7 @@ static void* receive_buffer(void *param)
 
     while (1)
     {
-        ret = WindowsSock_Recv(g_ioSockets.outputSock, data, sizeof data);
+        ret = recv(g_ioSockets.outputSock, data, sizeof data, 0);
         if (ret > 0)
             ret = write(STDOUT_FILENO, data, ret);
         else
@@ -113,12 +126,12 @@ struct PipeHandles {
     HANDLE wh;
 };
 
-static struct PipeHandles createPipe()
+static struct PipeHandles createPipe(void)
 {
-    SECURITY_ATTRIBUTES sa {};
-    sa.nLength = sizeof(sa);
+    SECURITY_ATTRIBUTES sa = {};
+    sa.nLength = sizeof sa;
     sa.bInheritHandle = TRUE;
-    PipeHandles ret {};
+    PipeHandles ret = {};
     const BOOL success = CreatePipe(&ret.rh, &ret.wh, &sa, 0);
     assert(success && "CreatePipe failed");
     return ret;
@@ -190,7 +203,7 @@ int main(int argc, char *argv[])
     };
 
     /* WinSock is initialized here */
-    WindowsSock_ctor();
+    WindowsSock();
     class Environment env;
     class TerminalState termState;
     std::string distroName;
@@ -433,10 +446,11 @@ int main(int argc, char *argv[])
     InitializeProcThreadAttributeList(NULL, 1, 0, &AttrSize);
     AttrList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, AttrSize);
     InitializeProcThreadAttributeList(AttrList, 1, 0, &AttrSize);
-    BOOL bRes = UpdateProcThreadAttribute(
-                AttrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, /* 0x20002u */
-                Values, sizeof Values, NULL, NULL);
-    assert(bRes != 0);
+    ret = UpdateProcThreadAttribute(
+            AttrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, /* 0x20002u */
+            Values, sizeof Values, NULL, NULL);
+    if (!ret)
+        fatal("UpdateProcThreadAttribute: %s", GetErrorMessage(GetLastError()).c_str());
 
     PROCESS_INFORMATION pi = {};
     STARTUPINFOEXW si = {};
@@ -496,12 +510,12 @@ int main(int argc, char *argv[])
     if (wslTwo)
     {
         const SOCKET sClient = AcceptHvSock(serverSock);
-        WindowsSock_Close(serverSock);
+        closesocket(serverSock);
 
         int randomPort = 0;
-        ret = WindowsSock_Recv(sClient, &randomPort, sizeof randomPort);
+        ret = recv(sClient, &randomPort, sizeof randomPort, 0);
         assert(ret > 0);
-        WindowsSock_Close(sClient);
+        closesocket(sClient);
 
         /* Create four I/O sockets and connect with WSL server */
         for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
@@ -516,9 +530,9 @@ int main(int argc, char *argv[])
         g_ioSockets.outputSock = AcceptLocSock(outputSocket);
         g_ioSockets.controlSock = AcceptLocSock(controlSocket);
 
-        WindowsSock_Close(inputSocket);
-        WindowsSock_Close(outputSocket);
-        WindowsSock_Close(controlSocket);
+        closesocket(inputSocket);
+        closesocket(outputSocket);
+        closesocket(controlSocket);
     }
 
     /* Create thread to send window size through control socket */
@@ -545,9 +559,9 @@ int main(int argc, char *argv[])
 
     /* cleanup */
     for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
-        WindowsSock_Close(g_ioSockets.sock[i]);
+        closesocket(g_ioSockets.sock[i]);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    WindowsSock_dtor();
+    WSACleanup();
     termState.exitCleanly(0);
 }

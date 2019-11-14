@@ -18,16 +18,11 @@
 #define RANDOMPORT() \
 rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW
 
-void WindowsSock_ctor(void)
+void WindowsSock(void)
 {
     struct WSAData wdata;
     const int wsaRet = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(wsaRet == 0);
-}
-
-void WindowsSock_dtor(void)
-{
-    WSACleanup();
 }
 
 SOCKET CreateHvSock(void)
@@ -158,20 +153,4 @@ int ListenLocSock(const SOCKET sock, const int backlog)
 
     /* Return port number to caller */
     return ntohs(addr.sin_port);
-}
-
-int WindowsSock_Recv(const SOCKET sock, void *buf, int len)
-{
-    return recv(sock, (char*)buf, len, 0);
-}
-
-int WindowsSock_Send(const SOCKET sock, void *buf, int len)
-{
-    return send(sock, (char*)buf, len, 0);
-}
-
-void WindowsSock_Close(const SOCKET sock)
-{
-    if (sock > 0)
-        closesocket(sock);
 }
