@@ -4,11 +4,15 @@
  * Copyright (C) Biswapriyo Nath.
  */
 
-#include <winsock.h>
+#include <winsock2.h>
+#include <hvsocket.h>
 #include <assert.h>
 
-#include "../hvsocket/hvsocket.h"
 #include "WindowsSock.hpp"
+
+#ifndef AF_HYPERV
+#define AF_HYPERV 34
+#endif
 
 /* The range 49152–65535 contains dynamic ports */
 #define DYNAMIC_PORT_LOW 49152
@@ -20,7 +24,7 @@ rand() % (DYNAMIC_PORT_HIGH - DYNAMIC_PORT_LOW) + DYNAMIC_PORT_LOW
 
 void WindowsSock(void)
 {
-    struct WSAData wdata;
+    WSADATA wdata;
     const int wsaRet = WSAStartup(MAKEWORD(2,2), &wdata);
     assert(wsaRet == 0);
 }
@@ -96,7 +100,7 @@ void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
                         sizeof timeout);
     assert(timeRet == 0);
 
-    struct SOCKADDR_HV addr = {};
+    SOCKADDR_HV addr = {};
     addr.Family = AF_HYPERV;
     memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
@@ -107,7 +111,7 @@ void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
 
 int ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog)
 {
-    struct SOCKADDR_HV addr = {};
+    SOCKADDR_HV addr = {};
     addr.Family = AF_HYPERV;
     memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);

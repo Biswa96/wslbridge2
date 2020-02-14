@@ -1,12 +1,16 @@
 /* 
  * This file is part of wslbridge2 project
  * Licensed under the GNU General Public License version 3
- * Copyright (C) 2019 Biswapriyo Nath
+ * Copyright (C) Biswapriyo Nath
  */
 
 #include <winsock2.h>
-#include "hvsocket.h"
+#include <hvsocket.h>
 #include <stdio.h>
+
+#ifndef AF_HYPERV
+#define AF_HYPERV 34
+#endif
 
 #define PORT_NUM 5000
 #define BUFF_SIZE 400
@@ -21,7 +25,7 @@ void Log(int ret, const char* function)
 
 int main(void)
 {
-    struct WSAData wdata;
+    WSADATA wdata;
     int ret = WSAStartup(MAKEWORD(2,2), &wdata);
     if (ret != 0)
         printf("WSAStartup error: %d\n", ret);
@@ -32,7 +36,7 @@ int main(void)
     else
         printf("socket error: %d\n", WSAGetLastError());
 
-    struct SOCKADDR_HV addr = { 0 };
+    SOCKADDR_HV addr = { 0 };
     addr.Family = AF_HYPERV;
     GUID VmId = { 0 }; /* enter the last parameter (a GUID) of wslhost.exe process */
     memcpy(&addr.VmId, &VmId, sizeof addr.VmId);
