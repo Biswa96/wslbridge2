@@ -1,12 +1,12 @@
 # This file is part of wslbridge2 project
 # Licensed under the GNU General Public License version 3
-# Copyright (C) 2019 Biswapriyo Nath
+# Copyright (C) Biswapriyo Nath
 
 
 # Build image
 image:
 - Ubuntu
-- Visual Studio 2017
+- Visual Studio 2019
 
 # Version format
 version: "0.{build}"
@@ -30,7 +30,6 @@ before_build:
     make -s RELEASE=1
 
 - cmd: |
-    C:\cygwin64\setup-x86_64.exe -d -g -n -N -X -q > NUL
     set PATH=C:\cygwin64;C:\cygwin64\bin;C:\cygwin64\usr\bin;%PATH%
     make -s RELEASE=1
 
