@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019 Biswapriyo Nath.
+ * Copyright (C) Biswapriyo Nath.
  */
 
 #include <arpa/inet.h>
@@ -231,7 +231,8 @@ int main(int argc, char *argv[])
     };
     union IoSockets ioSockets = {};
 
-    if (IsVmMode()) /* WSL2 */
+    const bool vmMode = IsVmMode();
+    if (vmMode) /* WSL2 */
     {
         /* First connect to Windows side then send random port */
         const int client_sock = ConnectHvSock(initPort);
@@ -372,7 +373,8 @@ int main(int argc, char *argv[])
             putenv(setting);
 
         /* Set WSL_GUEST_IP environment variable */
-        CreateEnvironmentBlock();
+        if (vmMode)
+            CreateEnvironmentBlock();
 
         /* Changed directory should affect in child process */
         if (!childParams.cwd.empty())
