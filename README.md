@@ -154,7 +154,7 @@ A full copy of the license is provided in [LICENSE](LICENSE).
 [2]: https://github.com/Biswa96/wslbridge2.git
 [3]: https://github.com/Biswa96/wslbridge2/releases
 [4]: https://ci.appveyor.com/project/Biswa96/wslbridge2
-[5]: https://ci.appveyor.com/api/projects/Biswa96/wslbridge2/artifacts/wslbridge2.7z?branch=master&job=Image%3A%20Visual%20Studio%202017
+[5]: https://ci.appveyor.com/api/projects/Biswa96/wslbridge2/artifacts/wslbridge2.7z?branch=master&job=Image%3A%20Visual%20Studio%202019
 [6]: https://docs.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/make-integration-service
 [7]: https://github.com/torvalds/linux/blob/master/net/vmw_vsock/af_vsock.c
 [8]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/vm_sockets.h
