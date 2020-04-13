@@ -7,12 +7,13 @@
 -->
 
 # wslbridge2
+<a href="/LICENSE"> <object data="https://img.shields.io/github/license/Biswa96/wslbridge2.svg?style=flat-square" type="image/svg+xml" alt="The GNU General Public License v3.0" height="20px" align="left"><img src="/wslbridge2licence.svg" alt="The GNU General Public License v3.00" height="20px" align="left"></object></a>
+<a href="/wslbridge2.git"> <object data="https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg?style=flat-square" type="image/svg+xml" alt="C++ 89.6%" height="20px" align="left"><img src="/wslbridge2lang.svg" alt="C++ 89.6%" height="20px" align="left"></object></a>
+<a href="/releases"> <object data="https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg?style=flat-square" type="image/svg+xml" alt="Code Size 75.1 kB" height="20px" align="left"><img src="/wslbridge2codesize.svg" alt="Code Size 75.1 kB" height="20px" align="left"></object></a>
+<a href="https://ci.appveyor.com/project/Biswa96/wslbridge2"> <object data="https://img.shields.io/github/release/Biswa96/wslbridge2.svg?style=flat-square" type="image/svg+xml" alt="Release v0.5" height="20px" align="left"><img src="/wslbridge2release.svg" alt="Release v0.5" height="20px" align="left"></object></a>
+<a href="https://ci.appveyor.com/api/projects/Biswa96/wslbridge2/artifacts/wslbridge2.7z?branch=master&job=Image%3A%20Visual%20Studio%202019"> <object data="https://img.shields.io/appveyor/ci/Biswa96/wslbridge2.svg?style=flat-square" type="image/svg+xml" alt="Build Passing" height="20px" align="left"><img src="/wslbridge2buildstatus.svg" alt="Build Passing" height="20px" align="left"></object></a>
 
-[![Licence](https://img.shields.io/github/license/Biswa96/wslbridge2.svg?style=flat-square)][1]&nbsp;&nbsp;&nbsp;
-[![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg?style=flat-square)][2]&nbsp;&nbsp;&nbsp;
-[![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg?style=flat-square)]()&nbsp;&nbsp;&nbsp;
-[![GitHub release](https://img.shields.io/github/release/Biswa96/wslbridge2.svg?style=flat-square)][3]&nbsp;&nbsp;&nbsp;
-[![Appveyor Build](https://img.shields.io/appveyor/ci/Biswa96/wslbridge2.svg?style=flat-square)][4]&nbsp;&nbsp;&nbsp;
+
 
 Explore various ways to connect Windows Subsystem for Linux (WSL) with
 Windows terminal emulators and command line programs.
