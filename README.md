@@ -32,7 +32,7 @@ Windows terminal emulators and command line programs.
 Clone this git repository. Run `make` in cygwin (or msys2) and WSL to make all.
 To build individual programs, go to `src` folder and run `make` command with
 the corresponding Makefile. By default `make` command will create dynamically
-linked executables. For static liked binaries use `make RELEASE=1` command.
+linked executables. For statically linked binaries, use `make RELEASE=1` command.
 All binaries will be placed in `bin` folder.
 
 
