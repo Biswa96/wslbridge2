@@ -206,7 +206,8 @@ void GetIp(void)
                         if (adpAddrTemp->IfIndex == adpInfoTemp->Index)
                         {
                             // fprintf(stdout, "IP: %s\n", adpInfoTemp->IpAddressList.IpAddress.String);
-                            setenv("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String, false);
+                            // setenv("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String, false);
+                            SetEnvironmentVariableA("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String);
                             break;
                         }
                         adpInfoTemp = adpInfoTemp->Next;
