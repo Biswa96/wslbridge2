@@ -208,6 +208,19 @@ void GetIp(void)
                             // fprintf(stdout, "IP: %s\n", adpInfoTemp->IpAddressList.IpAddress.String);
                             // setenv("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String, false);
                             SetEnvironmentVariableA("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String);
+
+                            char buff[MAX_PATH];
+                            std::string str;
+
+                            if (GetEnvironmentVariableA("WSLENV", buff, sizeof buff))
+                            {
+                                str = buff;
+                                str.append(":WSL_HOST_IP");
+                            }
+                            else
+                                str = "WSL_HOST_IP";
+
+                            SetEnvironmentVariableA("WSLENV", str.c_str());
                             break;
                         }
                         adpInfoTemp = adpInfoTemp->Next;
