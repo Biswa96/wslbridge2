@@ -1,6 +1,6 @@
 /* 
  * This file is part of wslbridge2 project
- * Licensed under the GNU General Public License version 3
+ * Licensed under the terms of the GNU General Public License v3 or later.
  * Copyright (C) Biswapriyo Nath
  */
 
