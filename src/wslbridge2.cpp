@@ -177,7 +177,12 @@ int main(int argc, char *argv[])
     GetIp();
 
     /* Set time as seed for generation of random port */
-    srand(time(NULL));
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    
+    long seed = tv.tv_usec << 16 | (getpid() & 0xFFFF);    
+    
+    srand(seed);
 
     int ret;
     const char shortopts[] = "+b:d:e:hlu:w:W:V:x";
