@@ -43,9 +43,62 @@ typedef struct _LXSS_STD_HANDLES
     LXSS_STD_HANDLE StdErr;
 } LXSS_STD_HANDLES, *PLXSS_STD_HANDLES;
 
-/* Unused COM methods are ignored with void parameters */
+/* Forward declaration of interface structure */
 typedef struct _ILxssUserSession ILxssUserSession;
 
+typedef HRESULT
+(STDMETHODCALLTYPE *CREATE_LX_PROCESS_ONE)(
+    /*_In_*/ ILxssUserSession *This,
+    /*_In_opt_*/ GUID *DistroId,
+    /*_In_opt_*/ PCSTR CommandLine,
+    /*_In_opt_*/ ULONG ArgumentCount,
+    /*_In_opt_*/ PCSTR *Arguments,
+    /*_In_opt_*/ PCWSTR CurrentDirectory,
+    /*_In_opt_*/ PCWSTR SharedEnvironment,
+    /*_In_opt_*/ PCWSTR ProcessEnvironment,
+    /*_In_opt_*/ SIZE_T EnvironmentLength,
+    /*_In_opt_*/ PCWSTR LinuxUserName,
+    /*_In_opt_*/ USHORT WindowWidthX,
+    /*_In_opt_*/ USHORT WindowHeightY,
+    /*_In_*/ ULONG ConsoleHandle,
+    /*_In_*/ PLXSS_STD_HANDLES StdHandles,
+    /*_Out_*/ GUID *InitiatedDistroId,
+    /*_Out_*/ GUID *LxInstanceId,
+    /*_Out_*/ PHANDLE LxProcessHandle,
+    /*_Out_*/ PHANDLE ServerHandle,
+    /*_Out_*/ SOCKET *InputSocket,
+    /*_Out_*/ SOCKET *OutputSocket,
+    /*_Out_*/ SOCKET *ErrorSocket,
+    /*_Out_*/ SOCKET *ControlSocket);
+
+/* Build 20211 : ULONG InstanceFlags is added. */
+typedef HRESULT
+(STDMETHODCALLTYPE *CREATE_LX_PROCESS_TWO)(
+    /*_In_*/ ILxssUserSession *This,
+    /*_In_opt_*/ GUID *DistroId,
+    /*_In_opt_*/ PCSTR CommandLine,
+    /*_In_opt_*/ ULONG ArgumentCount,
+    /*_In_opt_*/ PCSTR *Arguments,
+    /*_In_opt_*/ PCWSTR CurrentDirectory,
+    /*_In_opt_*/ PCWSTR SharedEnvironment,
+    /*_In_opt_*/ PCWSTR ProcessEnvironment,
+    /*_In_opt_*/ SIZE_T EnvironmentLength,
+    /*_In_opt_*/ PCWSTR LinuxUserName,
+    /*_In_opt_*/ USHORT WindowWidthX,
+    /*_In_opt_*/ USHORT WindowHeightY,
+    /*_In_*/ ULONG ConsoleHandle,
+    /*_In_*/ PLXSS_STD_HANDLES StdHandles,
+    /*_In_*/ ULONG InstanceFlags,
+    /*_Out_*/ GUID *InitiatedDistroId,
+    /*_Out_*/ GUID *LxInstanceId,
+    /*_Out_*/ PHANDLE LxProcessHandle,
+    /*_Out_*/ PHANDLE ServerHandle,
+    /*_Out_*/ SOCKET *InputSocket,
+    /*_Out_*/ SOCKET *OutputSocket,
+    /*_Out_*/ SOCKET *ErrorSocket,
+    /*_Out_*/ SOCKET *ControlSocket);
+
+/* Unused COM methods are ignored with void parameters */
 struct _ILxssUserSessionVtbl
 {
     /* IUnknown methods */
@@ -82,35 +135,25 @@ struct _ILxssUserSessionVtbl
     void *SetDefaultDistribution;
     void *EnumerateDistributions;
 
-    HRESULT(STDMETHODCALLTYPE *CreateLxProcess)(
-        /*_In_*/ ILxssUserSession *This,
-        /*_In_opt_*/ GUID *DistroId,
-        /*_In_opt_*/ PCSTR CommandLine,
-        /*_In_opt_*/ ULONG ArgumentCount,
-        /*_In_opt_*/ PCSTR *Arguments,
-        /*_In_opt_*/ PCWSTR CurrentDirectory,
-        /*_In_opt_*/ PCWSTR SharedEnvironment,
-        /*_In_opt_*/ PCWSTR ProcessEnvironment,
-        /*_In_opt_*/ SIZE_T EnvironmentLength,
-        /*_In_opt_*/ PCWSTR LinuxUserName,
-        /*_In_opt_*/ USHORT WindowWidthX,
-        /*_In_opt_*/ USHORT WindowHeightY,
-        /*_In_*/ ULONG ConsoleHandle,
-        /*_In_*/ PLXSS_STD_HANDLES StdHandles,
-        /*_Out_*/ GUID *InitiatedDistroId,
-        /*_Out_*/ GUID *LxInstanceId,
-        /*_Out_*/ PHANDLE LxProcessHandle,
-        /*_Out_*/ PHANDLE ServerHandle,
-        /*_Out_*/ SOCKET *InputSocket,
-        /*_Out_*/ SOCKET *OutputSocket,
-        /*_Out_*/ SOCKET *ErrorSocket,
-        /*_Out_*/ SOCKET *ControlSocket);
+    /* WARNING: Black magic here. */
+    union
+    {
+        /* Before Windows 10 Build 20211 RS */
+        CREATE_LX_PROCESS_ONE CreateLxProcess_One;
+
+        /* After Windows 10 Build 20211 RS */
+        CREATE_LX_PROCESS_TWO CreateLxProcess_Two;
+    };
 
     void *SetVersion;
     void *RegisterLxBusServer;
     void *ExportDistribution;
     void *ExportDistributionPipe;
+    void *AttachPassThroughDisk;
+    void *DetachPassThroughDisk;
+    void *MountDisk;
     void *Shutdown;
+    void *CreateVm;
 };
 
 struct _ILxssUserSession

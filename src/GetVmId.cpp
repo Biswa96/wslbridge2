@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath
+ * Copyright (C) 2019-2020 Biswapriyo Nath
  */
 
 /*
@@ -15,6 +15,7 @@
 
 #include "GetVmId.hpp"
 #include "LxssUserSession.hpp"
+#include "WinHelper.hpp"
 
 HRESULT GetVmId(
     GUID *LxInstanceID,
@@ -63,9 +64,12 @@ HRESULT GetVmId(
 
     assert(hRes == 0);
 
-    if (hRes == 0)
+    DWORD BuildNumber = GetWindowsBuild();
+
+    /* Before Windows 10 Build 20211 RS */
+    if (BuildNumber < 20211)
     {
-        hRes = wslSession->lpVtbl->CreateLxProcess(
+        hRes = wslSession->lpVtbl->CreateLxProcess_One(
             wslSession,
             &DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
@@ -80,12 +84,32 @@ HRESULT GetVmId(
             &SockOut,
             &SockErr,
             &ServerSocket);
+    }
+    else
+    {
+        /* After Windows 10 Build 20211 RS */
+        hRes = wslSession->lpVtbl->CreateLxProcess_Two(
+            wslSession,
+            &DistroId,
+            nullptr, 0, nullptr, nullptr, nullptr,
+            nullptr, 0, nullptr, 0, 0,
+            HandleToULong(ConsoleHandle),
+            &StdHandles,
+            0,
+            &InitiatedDistroID,
+            LxInstanceID,
+            &LxProcessHandle,
+            &ServerHandle,
+            &SockIn,
+            &SockOut,
+            &SockErr,
+            &ServerSocket);
+    }
 
-        if (hRes != 0)
-        {
-            *WslVersion = 0;
-            goto Cleanup;
-        }
+    if (hRes != 0)
+    {
+        *WslVersion = 0;
+        goto Cleanup;
     }
 
     /* ServerHandle and ServerSocket are exclusive */
