@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2020 Biswapriyo Nath.
  */
 
 #include <windows.h>
@@ -35,18 +35,12 @@
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
 
-#ifdef __cplusplus
 extern "C" {
-#endif
-
 WINBASEAPI int WINAPI closesocket(SOCKET s);
 WINBASEAPI int WINAPI recv(SOCKET s, void *buf, int len, int flags);
 WINBASEAPI int WINAPI send(SOCKET s, void *buf, int len, int flags);
 WINBASEAPI int WINAPI WSACleanup(void);
-
-#ifdef __cplusplus
 }
-#endif
 
 union IoSockets
 {
@@ -60,7 +54,7 @@ union IoSockets
 };
 
 /* global variable */
-static union IoSockets g_ioSockets = { 0 };
+static union IoSockets g_ioSockets = { 0, 0, 0 };
 
 static void resize_window(int signum)
 {
@@ -176,12 +170,14 @@ int main(int argc, char *argv[])
     /* Set WSL_HOST_IP environment variable */
     GetIp();
 
-    /* Set time as seed for generation of random port */
+    /*
+     * Set time as seed for generation of random port.
+     * wslbridge2 #24 and #27: Add aditional entropy
+     * to randomize port even in a split of seconds.
+     */
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    
-    long seed = tv.tv_usec << 16 | (getpid() & 0xFFFF);    
-    
+    long seed = tv.tv_usec << 16 | (getpid() & 0xFFFF);
     srand(seed);
 
     int ret;
@@ -321,7 +317,7 @@ int main(int argc, char *argv[])
         wslCmdLine.append(L"\"");
     }
 
-    /* Detect WSL version */
+    /* Detect WSL version with -V option explicitly. */
     bool wslTwo = false;
     if (wslVer)
         wslTwo = wslVer > WSL_VERSION_ONE;
@@ -340,7 +336,7 @@ int main(int argc, char *argv[])
     SOCKET outputSocket = 0;
     SOCKET controlSocket = 0;
 
-    if (wslTwo)
+    if (wslTwo) /* Use Hyper-V sockets. */
     {
         int WslVersion;
         const HRESULT hRes = GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
@@ -370,7 +366,7 @@ int main(int argc, char *argv[])
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
-    else
+    else /* WSL1: use localhost IPv4 sockets. */
     {
         inputSocket = CreateLocSock();
         outputSocket = CreateLocSock();
@@ -434,7 +430,7 @@ int main(int argc, char *argv[])
     const struct PipeHandles outputPipe = createPipe();
     const struct PipeHandles errorPipe = createPipe();
 
-    /* Initialize thread attribute list */
+    /* Initialize thread attribute list to inherit pipe handles. */
     HANDLE Values[2];
     Values[0] = outputPipe.wh;
     Values[1] = errorPipe.wh;
@@ -453,6 +449,8 @@ int main(int argc, char *argv[])
     PROCESS_INFORMATION pi = {};
     STARTUPINFOEXW si = {};
     si.StartupInfo.cb = sizeof si;
+
+    /* DO NOT use pipe handles to suck output from debug window */
     if (!debugMode)
     {
         si.lpAttributeList = AttrList;
