@@ -54,8 +54,9 @@ build_script:
 
 after_build:
 - cmd: |
+    del bin\*.obj bin\*.o
     dir /b bin
-    7z a -mx9 wslbridge2 bin\ > NUL
+    7z a -mx9 wslbridge2.zip bin\ > NUL
 
 artifacts:
-  - path: wslbridge2.7z
+  - path: wslbridge2.zip
