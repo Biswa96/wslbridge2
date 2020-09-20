@@ -17,6 +17,10 @@
 #include "LxssUserSession.hpp"
 #include "WinHelper.hpp"
 
+extern "C" {
+WINBASEAPI int WINAPI closesocket(SOCKET s);
+}
+
 HRESULT GetVmId(
     GUID *LxInstanceID,
     const std::wstring &DistroName,
@@ -112,11 +116,25 @@ HRESULT GetVmId(
         goto Cleanup;
     }
 
-    /* ServerHandle and ServerSocket are exclusive */
-    if (ServerHandle == nullptr && ServerSocket != 0)
+    /* ServerHandle is for WSL1. So, nullptr for WSL2. */
+    if (ServerHandle == nullptr)
+    {
         *WslVersion = WSL_VERSION_TWO;
-    else
+
+        /* wsltty#254: Closes extra shell process. */
+        if (SockIn) closesocket(SockIn);
+        if (SockOut) closesocket(SockOut);
+        if (SockErr) closesocket(SockErr);
+    }
+
+    /* ServerSocket is for WSL2. So, zero for WSL1. */
+    if (ServerSocket == 0)
+    {
         *WslVersion = WSL_VERSION_ONE;
+
+        if (LxProcessHandle) CloseHandle(LxProcessHandle);
+        if (ServerHandle) CloseHandle(ServerHandle);
+    }
 
 Cleanup:
     if (wslSession)
