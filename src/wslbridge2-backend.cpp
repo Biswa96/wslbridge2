@@ -126,6 +126,31 @@ static void CreateEnvironmentBlock(void)
     setenv("WSL_GUEST_IP", inet_ntoa(addr_in->sin_addr), false);
 
     close(sockfd);
+
+    long dest, gateway;
+    char iface[IF_NAMESIZE];
+    char buf[4096];
+
+    memset(iface, 0, sizeof iface);
+    memset(buf, 0, sizeof buf);
+
+    FILE *routeFile = fopen("/proc/net/route", "r");
+
+    while (fgets(buf, sizeof buf, routeFile))
+    {
+        if (sscanf(buf, "%s %lx %lx", iface, &dest, &gateway) == 3)
+        {
+            if (dest == 0) /* default destination */
+            {
+                struct in_addr addr;
+                addr.s_addr = gateway;
+                setenv("WSL_HOST_IP", inet_ntoa(addr), false);
+                break;
+            }
+        }
+    }
+
+    fclose(routeFile);
 }
 
 static void usage(const char *prog)
@@ -377,7 +402,10 @@ int main(int argc, char *argv[])
         for (char *const &setting : childParams.env)
             putenv(setting);
 
-        /* Set WSL_GUEST_IP environment variable */
+        /*
+         * wsltty#225: Set WSL_GUEST_IP environment variable in WSL2 only.
+         * As WSL1 gets same IP address as Windows and NIC may not be eth0.
+         */
         if (vmMode)
             CreateEnvironmentBlock();
 
