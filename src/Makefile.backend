@@ -1,6 +1,6 @@
 # This file is part of wslbridge2 project.
 # Licensed under the terms of the GNU General Public License v3 or later.
-# Copyright (C) 2019 Biswapriyo Nath.
+# Copyright (C) 2019-2020 Biswapriyo Nath.
 
 # Makefile for wslbridge2 backend
 
@@ -15,6 +15,7 @@ LFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
 BINS = \
+$(BINDIR)/common.o \
 $(BINDIR)/wslbridge2-backend.o
 
 all : $(BINDIR) $(NAME)
@@ -22,6 +23,9 @@ all : $(BINDIR) $(NAME)
 $(NAME) : $(BINS)
 	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
 	$(STRIP) $(BINDIR)/$@
+
+$(BINDIR)/common.o : common.cpp
+	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/wslbridge2-backend.o : wslbridge2-backend.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@

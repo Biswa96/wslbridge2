@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2020 Biswapriyo Nath.
  */
 
 #include <arpa/inet.h>
@@ -30,6 +30,8 @@
 
 /* This requires linux-headers package */
 #include <linux/vm_sockets.h>
+
+#include "common.hpp"
 
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
@@ -234,6 +236,9 @@ int main(int argc, char *argv[])
     const bool vmMode = IsVmMode();
     if (vmMode) /* WSL2 */
     {
+        if (!initPort)
+            fatal("[WSL2] Error: Initialize port is not provided.\n");
+
         /* First connect to Windows side then send random port */
         const int client_sock = ConnectHvSock(initPort);
         const int server_sock = ListenVsockAnyPort(&randomPort, ARRAYSIZE(ioSockets.sock));
