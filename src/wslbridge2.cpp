@@ -504,7 +504,9 @@ int main(int argc, char *argv[])
             msg.append(err);
         }
 
-        termState.fatal("%s", msg.c_str());
+        /* Exit with error if output/error message is not empty. */
+        if (!msg.empty())
+            termState.fatal("%s", msg.c_str());
     });
 
     if (wslTwo)
@@ -554,8 +556,13 @@ int main(int argc, char *argv[])
 
     termState.enterRawMode();
 
-    pthread_join(tidInput, nullptr);
+    /*
+     * wsltty#254: WORKAROUND: Terminates input thread forcefully
+     * when output thread exits. Need some inter-thread syncing.
+     */
     pthread_join(tidOutput, nullptr);
+    pthread_kill(tidInput, 0);
+    // pthread_join(tidInput, nullptr);
 
     /* cleanup */
     for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
