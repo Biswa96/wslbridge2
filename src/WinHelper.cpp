@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2020 Biswapriyo Nath.
  */
 
 /*
@@ -10,9 +10,6 @@
 
 #include <winsock2.h>
 #include <assert.h>
-#include <iphlpapi.h>
-#include <stdio.h>
-#include <wchar.h>
 
 #include <string>
 #include <vector>
@@ -169,76 +166,4 @@ DWORD GetWindowsBuild(void)
     FreeLibrary(hMod);
 
     return info.dwBuildNumber;
-}
-
-void GetIp(void)
-{
-    ULONG ret, size;
-    ULONG Flags = GAA_FLAG_SKIP_FRIENDLY_NAME |
-                  GAA_FLAG_SKIP_MULTICAST |
-                  GAA_FLAG_SKIP_ANYCAST;
-    HANDLE hHeap = GetProcessHeap();
-
-    ret = GetAdaptersAddresses(AF_UNSPEC, Flags, NULL, NULL, &size);
-    auto adpAddr = (PIP_ADAPTER_ADDRESSES)HeapAlloc(hHeap, 0, size);
-    ret = GetAdaptersAddresses(AF_UNSPEC, Flags, NULL, adpAddr, &size);
-
-    if (ret == 0)
-    {
-        auto adpAddrTemp = adpAddr;
-        while (adpAddrTemp)
-        {
-            /* Find interface name containing "WSL" string */
-            if (wcsstr(adpAddrTemp->FriendlyName, L"WSL"))
-            {
-                // fwprintf(stdout, L"Interface Name: %ls\n", adpAddrTemp->FriendlyName);
-
-                ret = GetAdaptersInfo(NULL, &size);
-                auto adpInfo = (PIP_ADAPTER_INFO)HeapAlloc(hHeap, 0, size);
-                ret = GetAdaptersInfo(adpInfo, &size);
-
-                if (ret == 0)
-                {
-                    auto adpInfoTemp = adpInfo;
-                    while (adpInfoTemp)
-                    {
-                        /* Check if network adapter index matches */
-                        if (adpAddrTemp->IfIndex == adpInfoTemp->Index)
-                        {
-                            // fprintf(stdout, "IP: %s\n", adpInfoTemp->IpAddressList.IpAddress.String);
-                            // setenv("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String, false);
-                            SetEnvironmentVariableA("WSL_HOST_IP", adpInfoTemp->IpAddressList.IpAddress.String);
-
-                            char buff[MAX_PATH];
-                            std::string str;
-
-                            if (GetEnvironmentVariableA("WSLENV", buff, sizeof buff))
-                            {
-                                str = buff;
-                                str.append(":WSL_HOST_IP");
-                            }
-                            else
-                                str = "WSL_HOST_IP";
-
-                            SetEnvironmentVariableA("WSLENV", str.c_str());
-                            break;
-                        }
-                        adpInfoTemp = adpInfoTemp->Next;
-                    }
-                }
-                else
-                    fprintf(stderr, "GetAdaptersInfo: %s", GetErrorMessage(ret).c_str());
-
-                HeapFree(hHeap, 0, adpInfo);
-
-                /* Exit from loop if we find that interface name */
-                break;
-            }
-            adpAddrTemp = adpAddrTemp->Next;
-        }
-    }
-    else
-        fprintf(stderr, "GetAdaptersAddresses: %s", GetErrorMessage(ret).c_str());
-
-    HeapFree(hHeap, 0, adpAddr);
 }

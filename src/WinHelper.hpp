@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2020 Biswapriyo Nath.
  */
 
 /*
@@ -14,6 +14,5 @@
 std::string GetErrorMessage(DWORD MessageId);
 bool IsWslTwo(std::wstring DistroName);
 DWORD GetWindowsBuild(void);
-void GetIp(void);
 
 #endif /* WINHELPER_HPP */

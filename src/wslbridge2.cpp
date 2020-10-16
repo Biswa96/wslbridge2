@@ -167,13 +167,6 @@ int main(int argc, char *argv[])
     cygwin_internal(CW_SYNC_WINENV);
 #endif
 
-    /* Set WSL_HOST_IP variable from vEthernet(WSL) interface.
-     * This does not seem to work from Windows 10 build 20201.
-     * So, set this environment variable in backend side.
-     */
-    // GetIp();
-
-
     /*
      * Set time as seed for generation of random port.
      * wslbridge2 #24 and #27: Add aditional entropy

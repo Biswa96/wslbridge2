@@ -1,6 +1,6 @@
 # This file is part of wslbridge2 project.
 # Licensed under the terms of the GNU General Public License v3 or later.
-# Copyright (C) Biswapriyo Nath.
+# Copyright (C) 2019-2020 Biswapriyo Nath.
 
 # Makefile for wslbridge2 frontend
 
@@ -17,7 +17,7 @@ endif
 # DO NOT REMOVE ws2_32 library. This forces linker to use Windows socket
 # instead of Cygwin POSIX socket implementation
 
-LIBS = -liphlpapi -lole32 -lws2_32
+LIBS = -lole32 -lws2_32
 
 OBJS = \
 $(BINDIR)/common.obj \
