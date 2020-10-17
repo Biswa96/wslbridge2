@@ -8,16 +8,13 @@
 #include <assert.h>
 #include <getopt.h>
 #include <net/if.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <pty.h>
 #include <pwd.h>
 #include <signal.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -300,6 +297,15 @@ int main(int argc, char *argv[])
         }
     }
 
+    /*
+     * wslbridge2#23: Wait for any child process changed state.
+     * i.e. prevent zombies.
+     */
+    struct sigaction act = {};
+    act.sa_flags = SA_SIGINFO;
+    act.sa_sigaction = [](int x, siginfo_t *y, void *z) { wait(NULL); };
+    sigaction(SIGCHLD, &act, NULL);
+
     int mfd;
     char ptyname[16];
     const pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
@@ -315,15 +321,6 @@ int main(int argc, char *argv[])
         /* Use dupped master fd to read OR write */
         const int mfd_dp = dup(mfd);
         assert(mfd_dp > 0);
-
-        sigset_t set;
-        sigemptyset(&set);
-        sigaddset(&set, SIGCHLD);
-        ret = sigprocmask(SIG_BLOCK, &set, NULL);
-        assert(ret == 0);
-
-        const int sigfd = signalfd(-1, &set, 0);
-        assert(sigfd > 0);
 
         struct pollfd fds[] = {
                 { ioSockets.inputSock, POLLIN, 0 },
@@ -375,23 +372,14 @@ int main(int argc, char *argv[])
             /* Shutdown I/O sockets when child process terminates */
             if (fds[2].revents & (POLLERR | POLLHUP))
             {
-                struct signalfd_siginfo sigbuff;
-                ret = read(sigfd, &sigbuff, sizeof sigbuff);
-                if (sigbuff.ssi_signo != SIGCHLD)
-                    perror("unexpected signal");
-
-                int wstatus;
-                if (waitpid(child, &wstatus, 0) != child)
-                    perror("waitpid");
-
                 for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
                     shutdown(ioSockets.sock[i], SHUT_RDWR);
+
                 break;
             }
         }
         while (writeRet > 0);
 
-        close(sigfd);
         close(mfd_dp);
         close(mfd);
     }
