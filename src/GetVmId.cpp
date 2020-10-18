@@ -8,7 +8,7 @@
  * GetVmId.cpp: Get GUID of WSL2 Utility VM with LxssUserSession COM interface.
  */
 
-#include <windows.h>
+#include <winsock.h>
 #include <winternl.h> /* TEB, PEB, ConsoleHandle */
 #include <assert.h>
 #include <string>
@@ -16,10 +16,6 @@
 #include "GetVmId.hpp"
 #include "LxssUserSession.hpp"
 #include "WinHelper.hpp"
-
-extern "C" {
-WINBASEAPI int WINAPI closesocket(SOCKET s);
-}
 
 HRESULT GetVmId(
     GUID *LxInstanceID,

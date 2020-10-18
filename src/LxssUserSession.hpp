@@ -11,11 +11,6 @@
 #ifndef LXSSUSERSESSION_H
 #define LXSSUSERSESSION_H
 
-/* As winsock.h and sys/socket.h can not coexist */
-#ifndef SOCKET
-#define SOCKET size_t
-#endif
-
 /* Class indentifier */
 static const GUID CLSID_LxssUserSession = {
     0x4F476546,
