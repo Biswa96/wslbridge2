@@ -428,10 +428,7 @@ int main(int argc, char *argv[])
     const struct PipeHandles errorPipe = createPipe();
 
     /* Initialize thread attribute list to inherit pipe handles. */
-    HANDLE Values[2];
-    Values[0] = outputPipe.wh;
-    Values[1] = errorPipe.wh;
-
+    HANDLE Values[2] = { outputPipe.wh, errorPipe.wh };
     SIZE_T AttrSize;
     LPPROC_THREAD_ATTRIBUTE_LIST AttrList = NULL;
     InitializeProcThreadAttributeList(NULL, 1, 0, &AttrSize);
@@ -443,13 +440,19 @@ int main(int argc, char *argv[])
     if (!ret)
         fatal("UpdateProcThreadAttribute: %s", GetErrorMessage(GetLastError()).c_str());
 
+    DWORD CreationFlags = EXTENDED_STARTUPINFO_PRESENT;
     PROCESS_INFORMATION pi = {};
     STARTUPINFOEXW si = {};
     si.StartupInfo.cb = sizeof si;
 
-    /* DO NOT use pipe handles to suck output from debug window */
-    if (!debugMode)
+    /* DO NOT use pipe handles to redirect output from debug window. */
+    if (debugMode)
     {
+        CreationFlags |= CREATE_NEW_CONSOLE;
+    }
+    else
+    {
+        CreationFlags |= CREATE_NO_WINDOW;
         si.lpAttributeList = AttrList;
         si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
         si.StartupInfo.hStdOutput = outputPipe.wh;
@@ -462,7 +465,7 @@ int main(int argc, char *argv[])
             NULL,
             NULL,
             TRUE,
-            debugMode ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,
+            CreationFlags,
             NULL,
             NULL,
             &si.StartupInfo,
