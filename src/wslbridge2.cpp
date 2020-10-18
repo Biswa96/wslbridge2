@@ -4,6 +4,7 @@
  * Copyright (C) 2019-2020 Biswapriyo Nath.
  */
 
+/* DO NOT include winsock.h, conflicts with poll.h. */
 #include <windows.h>
 #include <assert.h>
 #include <getopt.h>
@@ -508,7 +509,6 @@ int main(int argc, char *argv[])
     if (wslTwo)
     {
         const SOCKET sClient = AcceptHvSock(serverSock);
-        closesocket(serverSock);
 
         int randomPort = 0;
         ret = recv(sClient, &randomPort, sizeof randomPort, 0);
@@ -527,10 +527,6 @@ int main(int argc, char *argv[])
         g_ioSockets.inputSock = AcceptLocSock(inputSocket);
         g_ioSockets.outputSock = AcceptLocSock(outputSocket);
         g_ioSockets.controlSock = AcceptLocSock(controlSocket);
-
-        closesocket(inputSocket);
-        closesocket(outputSocket);
-        closesocket(controlSocket);
     }
 
     /* Create thread to send window size through control socket */

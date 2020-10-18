@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2020 Biswapriyo Nath.
  */
 
 #include <winsock2.h>
@@ -69,6 +69,9 @@ SOCKET AcceptHvSock(const SOCKET sock)
 {
     const SOCKET cSock = accept(sock, NULL, NULL);
     assert(cSock > 0);
+
+    /* Server socket is no longer needed. */
+    closesocket(sock);
     return cSock;
 }
 
@@ -86,6 +89,8 @@ SOCKET AcceptLocSock(const SOCKET sock)
                            sizeof flag);
     assert(nodelayRet == 0);
 
+    /* Server socket is no longer needed. */
+    closesocket(sock);
     return cSock;
 }
 
@@ -117,8 +122,7 @@ int ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog)
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
 
     /* Try to bind to a dynamic port */
-    int nretries = 0;
-    int port;
+    int nretries = 0, port = 0;
 
     while (nretries < BIND_MAX_RETRIES)
     {
