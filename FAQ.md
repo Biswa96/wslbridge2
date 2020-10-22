@@ -1,7 +1,7 @@
 <!--
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2020 Biswapriyo Nath.
  *
  * FAQ.md: questions and answers for developers and enthusiasts
 -->
@@ -35,13 +35,13 @@ Thanks to Brian Inglis (@BrianInglis) for asking [these questions][2].
 command line string. The command line containing wsl.exe is used to create
 the backend process which is generally hidden (use `-x` option to show).
   - Now both frontend and backend create sockets to connect with each other.
-The socket type is different in case of WSL1 (AF_INET) and WSL2 (AF_VSOCK).
-  - Three sockets from each side connects and tunnels the I/O buffers.
+The socket domain is AF_INET in WSL1 and AF_VSOCK in WSL2.
+  - Three network sockets from each side connects and tunnels the I/O buffers.
   - In WSL side, the backend creates a pseudo tty where master side connects
 to the frontend and slave side execs the child process or default shell.
-  - Remember, wslbridge2 does not know or care what buffers are passed through
+  - Remember, wslbridge2 does not know or care what buffer is passed through
 the sockets. The responsibility goes to the terminal emulator or command line
-program in Windows side which can understand it.
+program in Windows side which can understand the buffer.
 
 ------
 
@@ -64,15 +64,16 @@ tl;dr, three sockets, one port.
 
 **Q3: wslbridge vs wslbridge2 -- any difference?**
 
-**A3:** The underlying concept is same, only buffer handling is different.
+**A3:** The underlying concept is same for both. Only socket creation procedure
+and buffer handling are different.
 
 ------
 
 **Q4: How to get Windows IP address in WSL2 quickly?**
 
-**A4:** Run `wslbridge2.exe -e WSL_HOST_IP` command. Windows 10 IPv4 address
-will be accessed from `WSL_HOST_IP` environment variable and WSL2 IPv4 address
-from `WSL_GUEST_IP`. e.g. for GUI programs, use `export DISPLAY=$WSL_HOST_IP:0`.
+**A4:** Run `wslbridge2.exe` command as usual. IPv4 address of Windows 10 side
+is set to `WSL_HOST_IP` and of WSL2 side is set to `WSL_GUEST_IP` environment
+variable. e.g. for GUI programs, use `export DISPLAY=$WSL_HOST_IP:0`.
 
 ------
 
