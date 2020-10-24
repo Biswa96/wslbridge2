@@ -64,7 +64,7 @@ HRESULT GetVmId(
 
     assert(hRes == 0);
 
-    DWORD BuildNumber = GetWindowsBuild();
+    const DWORD BuildNumber = GetWindowsBuild();
 
     /* Before Windows 10 Build 20211 RS */
     if (BuildNumber < 20211)

@@ -38,9 +38,6 @@ typedef HRESULT (WINAPI *GETDISTROCONFIGPROC)(
     char **defaultEnvironmentVariables,
     int *defaultEnvironmentVariableCount);
 
-typedef void (WINAPI *RTLGETVERSIONPROC)(
-    OSVERSIONINFOW *lpVersionInformation);
-
 std::string GetErrorMessage(DWORD MessageId)
 {
     wchar_t *Buffer = NULL;
@@ -146,24 +143,4 @@ bool IsWslTwo(std::wstring DistroName)
         return true;
     else
         return false;
-}
-
-DWORD GetWindowsBuild(void)
-{
-    HMODULE hMod = LoadLibraryExW(
-                   L"ntdll.dll",
-                   NULL,
-                   LOAD_LIBRARY_SEARCH_SYSTEM32);
-    assert(hMod != NULL);
-
-    RTLGETVERSIONPROC pfnRtlGetVersion = (RTLGETVERSIONPROC)
-                        GetProcAddress(hMod, "RtlGetVersion");
-    assert(pfnRtlGetVersion != NULL);
-
-    OSVERSIONINFOW info = {};
-    info.dwOSVersionInfoSize = sizeof info;
-    pfnRtlGetVersion(&info);
-    FreeLibrary(hMod);
-
-    return info.dwBuildNumber;
 }

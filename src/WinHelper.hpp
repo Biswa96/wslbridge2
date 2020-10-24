@@ -11,8 +11,10 @@
 #ifndef WINHELPER_HPP
 #define WINHELPER_HPP
 
+/* KUSER_SHARED_DATA.NtBuildNumber */
+#define GetWindowsBuild() (*(unsigned int *)(0x7FFE0000 + 0x0260))
+
 std::string GetErrorMessage(DWORD MessageId);
 bool IsWslTwo(std::wstring DistroName);
-DWORD GetWindowsBuild(void);
 
 #endif /* WINHELPER_HPP */
