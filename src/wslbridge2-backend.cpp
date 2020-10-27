@@ -184,6 +184,22 @@ struct ChildParams
     std::string cwd;
 };
 
+/* Structure only to hold socket file descriptors. */
+union IoSockets
+{
+    int sock[3];
+    struct
+    {
+        int inputSock;
+        int outputSock;
+        int controlSock;
+    };
+};
+
+/* Global variable. */
+static volatile union IoSockets ioSockets = { 0 };
+static volatile bool debugMode = false;
+
 int main(int argc, char *argv[])
 {
     if (argc < 2)
@@ -192,7 +208,6 @@ int main(int argc, char *argv[])
     int ret;
     struct winsize winp;
     struct ChildParams childParams;
-    bool debugMode = false;
     bool loginMode = false;
 
     /* Ports for WSL1 */
@@ -244,17 +259,6 @@ int main(int argc, char *argv[])
         assert(ret == 0);
     }
 
-    /* Structure only to hold socket file descriptors */
-    union IoSockets {
-        int sock[3];
-        struct {
-            int inputSock;
-            int outputSock;
-            int controlSock;
-        };
-    };
-    union IoSockets ioSockets = {};
-
     const bool vmMode = IsVmMode();
     if (vmMode) /* WSL2 */
     {
@@ -279,7 +283,7 @@ int main(int argc, char *argv[])
         if (debugMode)
         {
             printf(
-            "cols: %d rows: %d initPort: %d randomPort: %d\n",
+            "cols: %d rows: %d initPort: %d randomPort: %u\n",
             winp.ws_col, winp.ws_row, initPort, randomPort);
         }
     }
@@ -303,7 +307,18 @@ int main(int argc, char *argv[])
      */
     struct sigaction act = {};
     act.sa_flags = SA_SIGINFO;
-    act.sa_sigaction = [](int x, siginfo_t *y, void *z) { wait(NULL); };
+    act.sa_sigaction = [](int sig, siginfo_t *info, void *ucontext)
+    {
+        for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
+            shutdown(ioSockets.sock[i], SHUT_RDWR);
+
+        int status;
+        wait(&status);
+        printf("child wait status: %d\n", status);
+
+        if (debugMode)
+            getchar();
+    };
     sigaction(SIGCHLD, &act, NULL);
 
     int mfd;
