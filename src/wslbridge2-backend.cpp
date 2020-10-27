@@ -280,12 +280,8 @@ int main(int argc, char *argv[])
         }
         close(server_sock);
 
-        if (debugMode)
-        {
-            printf(
-            "cols: %d rows: %d initPort: %d randomPort: %u\n",
+        printf("cols: %d rows: %d initPort: %d randomPort: %u\n",
             winp.ws_col, winp.ws_row, initPort, randomPort);
-        }
     }
     else /* WSL1 */
     {
@@ -293,12 +289,8 @@ int main(int argc, char *argv[])
         ioSockets.outputSock = ConnectLocalSock(outputPort);
         ioSockets.controlSock = ConnectLocalSock(controlPort);
 
-        if (debugMode)
-        {
-            printf(
-            "cols: %d rows: %d in: %d out: %d con: %d\n",
+        printf("cols: %d rows: %d in: %d out: %d con: %d\n",
             winp.ws_col, winp.ws_row, inputPort, outputPort, controlPort);
-        }
     }
 
     /*
@@ -324,15 +316,12 @@ int main(int argc, char *argv[])
     int mfd;
     char ptyname[16];
     const pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
-    if (child > 0 && debugMode)
-    {
-        printf(
-        "master fd: %d child pid: %d pty name: %s\n",
-        mfd, child, ptyname);
-    }
 
     if (child > 0) /* parent or master */
     {
+        printf("master fd: %d child pid: %d pty name: %s\n",
+            mfd, child, ptyname);
+
         /* Use dupped master fd to read OR write */
         const int mfd_dp = dup(mfd);
         assert(mfd_dp > 0);
