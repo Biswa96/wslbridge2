@@ -306,10 +306,14 @@ int main(int argc, char *argv[])
 
         int status;
         wait(&status);
-        printf("child wait status: %d\n", status);
+        printf("signal: %d child status: %d child pid: %d\n",
+            sig, status, info->si_pid);
 
         if (debugMode)
+        {
+            printf("Press any key to continue...\n");
             getchar();
+        }
     };
     sigaction(SIGCHLD, &act, NULL);
 
@@ -361,8 +365,7 @@ int main(int argc, char *argv[])
                 if (ret != 0)
                     perror("ioctl(TIOCSWINSZ)");
 
-                if (debugMode)
-                    printf("cols: %d rows: %d\n", winp.ws_col, winp.ws_row);
+                printf("cols: %d rows: %d\n", winp.ws_col, winp.ws_row);
             }
 
             /* Receive buffers from master and send to output socket */
