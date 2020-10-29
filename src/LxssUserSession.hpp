@@ -11,7 +11,7 @@
 #ifndef LXSSUSERSESSION_H
 #define LXSSUSERSESSION_H
 
-/* Class indentifier */
+/* Class identifier */
 static const GUID CLSID_LxssUserSession = {
     0x4F476546,
     0xB412,
@@ -93,7 +93,7 @@ typedef HRESULT
     /*_Out_*/ SOCKET *ErrorSocket,
     /*_Out_*/ SOCKET *ControlSocket);
 
-/* Unused COM methods are ignored with void parameters */
+/* Unused COM methods are ignored as void pointers */
 struct _ILxssUserSessionVtbl
 {
     /* IUnknown methods */
@@ -108,6 +108,7 @@ struct _ILxssUserSessionVtbl
     ULONG(STDMETHODCALLTYPE *Release)(
         ILxssUserSession *This);
 
+    /* ILxssUserSession methods */
     void *CreateInstance;
     void *RegisterDistribution;
     void *RegisterDistributionPipe;
@@ -121,7 +122,18 @@ struct _ILxssUserSessionVtbl
     void *TerminateDistribution;
     void *UnregisterDistribution;
     void *ConfigureDistribution;
-    void *GetDistributionConfiguration;
+
+    HRESULT(STDMETHODCALLTYPE *GetDistributionConfiguration)(
+        /*_In_*/ ILxssUserSession *wslSession,
+        /*_In_opt_*/ GUID *DistroId,
+        /*_Out_*/ PWSTR *DistributionName,
+        /*_Out_*/ PULONG Version,
+        /*_Out_*/ PWSTR *BasePath,
+        /*_Out_*/ PSTR *KernelCommandLine,
+        /*_Out_*/ PULONG DefaultUid,
+        /*_Out_*/ PULONG EnvironmentCount,
+        /*_Out_*/ PSTR **DefaultEnvironment,
+        /*_Out_*/ PULONG Flags);
 
     HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
         ILxssUserSession *This,
