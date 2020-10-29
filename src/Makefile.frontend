@@ -25,7 +25,6 @@ $(BINDIR)/GetVmId.obj \
 $(BINDIR)/Helpers.obj \
 $(BINDIR)/TerminalState.obj \
 $(BINDIR)/WindowsSock.obj \
-$(BINDIR)/WinHelper.obj \
 $(BINDIR)/wslbridge2.obj
 
 # Windows header specific options
@@ -53,9 +52,6 @@ $(BINDIR)/TerminalState.obj : TerminalState.cpp
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/WindowsSock.obj : WindowsSock.cpp
-	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
-
-$(BINDIR)/WinHelper.obj : WinHelper.cpp
 	$(CXX) -c $(CFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR)/wslbridge2.obj : wslbridge2.cpp
