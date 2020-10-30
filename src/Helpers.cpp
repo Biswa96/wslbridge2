@@ -79,14 +79,9 @@ wchar_t lowerDrive(wchar_t ch)
 
 std::wstring findSystemProgram(const wchar_t *name)
 {
-    std::array<wchar_t, MAX_PATH> windir;
-    windir[0] = L'\0';
-    if (GetWindowsDirectoryW(windir.data(), windir.size()) == 0)
-        fatal("error: GetWindowsDirectory call failed\n");
-
     const wchar_t *const kPart32 = L"\\System32\\";
     const auto path = [&](const wchar_t *part) -> std::wstring {
-        return std::wstring(windir.data()) + part + name;
+        return std::wstring(GetWinDir()) + part + name;
     };
 #if defined(__x86_64__)
     const auto ret = path(kPart32);

@@ -13,6 +13,9 @@
 /* KUSER_SHARED_DATA.NtBuildNumber */
 #define GetWindowsBuild() (*(unsigned int *)(0x7FFE0000 + 0x0260))
 
+/* KUSER_SHARED_DATA.NtSystemRoot */
+#define GetWinDir() ((wchar_t *)(0x7FFE0000 + 0x0030))
+
 std::wstring mbsToWcs(const std::string &s);
 std::string wcsToMbs(const std::wstring &s, bool emptyOnError=false);
 std::wstring dirname(const std::wstring &path);
