@@ -29,7 +29,6 @@
 #include "Helpers.hpp"
 #include "Environment.hpp"
 #include "TerminalState.hpp"
-#include "WinHelper.hpp"
 #include "WindowsSock.hpp"
 
 #ifndef ARRAYSIZE
@@ -55,7 +54,7 @@ union IoSockets
 };
 
 /* global variable */
-static union IoSockets g_ioSockets = { 0, 0, 0 };
+static volatile union IoSockets g_ioSockets = { 0, 0, 0 };
 
 static void resize_window(int signum)
 {
@@ -194,8 +193,6 @@ int main(int argc, char *argv[])
         { 0,               no_argument,       0,  0  },
     };
 
-    /* WinSock is initialized here */
-    WindowsSock();
     class Environment env;
     class TerminalState termState;
     std::string distroName;
@@ -203,7 +200,6 @@ int main(int argc, char *argv[])
     std::string winDir;
     std::string wslDir;
     std::string userName;
-    int wslVer = 0;
     bool debugMode = false;
     bool loginMode = false;
 
@@ -275,9 +271,7 @@ int main(int argc, char *argv[])
                 break;
 
             case 'V':
-                wslVer = atoi(optarg);
-                if (!optarg || !*optarg)
-                    invalid_arg("wslver");
+                /* empty */
                 break;
 
             case 'x':
@@ -315,33 +309,26 @@ int main(int argc, char *argv[])
         wslCmdLine.append(L"\"");
     }
 
-    /* Detect WSL version with -V option explicitly. */
-    bool wslTwo = false;
-    if (wslVer)
-        wslTwo = wslVer > WSL_VERSION_ONE;
-    else
-    {
-        /* Check default distribution */
-        if (distroName.empty())
-            wslTwo = IsWslTwo(L"");
-        else
-            wslTwo = IsWslTwo(mbsToWcs(distroName));
-    }
+    /* Initialize WinSock. */
+    WindowsSock();
 
-    GUID VmId;
+    /* Intialize COM. */
+    ComInit();
+
+    GUID DistroId, VmId;
     SOCKET serverSock = 0;
     SOCKET inputSocket = 0;
     SOCKET outputSocket = 0;
     SOCKET controlSocket = 0;
 
-    if (wslTwo) /* Use Hyper-V sockets. */
+    /* Detect WSL version. Assume distroName is initialized empty. */
+    const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName));
+
+    if (wslTwo) /* WSL2: Use Hyper-V sockets. */
     {
-        int WslVersion;
-        const HRESULT hRes = GetVmId(&VmId, mbsToWcs(distroName), &WslVersion);
+        const HRESULT hRes = GetVmId(&DistroId, &VmId);
         if (hRes != 0)
             fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
-        if (WslVersion != WSL_VERSION_TWO)
-            fatal("This is for WSL2 distributions only\n");
 
         /* Create server to receive random port number */
         serverSock = CreateHvSock();
@@ -515,7 +502,7 @@ int main(int argc, char *argv[])
         assert(ret > 0);
         closesocket(sClient);
 
-        /* Create four I/O sockets and connect with WSL server */
+        /* Create I/O sockets and connect with WSL server */
         for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
         {
             g_ioSockets.sock[i] = CreateHvSock();
@@ -529,7 +516,7 @@ int main(int argc, char *argv[])
         g_ioSockets.controlSock = AcceptLocSock(controlSocket);
     }
 
-    /* Create thread to send window size through control socket */
+    /* Capture window resize signal and send buffer to control socket */
     struct sigaction act = {};
     act.sa_handler = resize_window;
     act.sa_flags = SA_RESTART;
