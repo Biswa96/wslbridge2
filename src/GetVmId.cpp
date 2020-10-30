@@ -15,15 +15,91 @@
 
 #include "GetVmId.hpp"
 #include "LxssUserSession.hpp"
-#include "WinHelper.hpp"
+#include "Helpers.hpp"
 
-HRESULT GetVmId(
-    GUID *LxInstanceID,
-    const std::wstring &DistroName,
-    int *WslVersion)
+#ifndef WSL_DISTRIBUTION_FLAGS_VALID
+
+#define WSL_DISTRIBUTION_FLAGS_NONE 0
+#define WSL_DISTRIBUTION_FLAGS_ENABLE_INTEROP 1
+#define WSL_DISTRIBUTION_FLAGS_APPEND_NT_PATH 2
+#define WSL_DISTRIBUTION_FLAGS_ENABLE_DRIVE_MOUNTING 4
+#define WSL_DISTRIBUTION_FLAGS_DEFAULT \
+    ( WSL_DISTRIBUTION_FLAGS_ENABLE_INTEROP | \
+      WSL_DISTRIBUTION_FLAGS_APPEND_NT_PATH | \
+      WSL_DISTRIBUTION_FLAGS_ENABLE_DRIVE_MOUNTING )
+
+#endif /* WSL_DISTRIBUTION_FLAGS_VALID */
+
+static ILxssUserSession *wslSession = NULL;
+
+void ComInit(void)
 {
     HRESULT hRes;
-    GUID DistroId, InitiatedDistroID;
+
+    hRes = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    assert(hRes == 0);
+
+    hRes = CoInitializeSecurity(NULL, -1, NULL, NULL,
+                                RPC_C_AUTHN_LEVEL_DEFAULT,
+                                SecurityDelegation, NULL,
+                                EOAC_STATIC_CLOAKING, NULL);
+    assert(hRes == 0);
+
+    hRes = CoCreateInstance(CLSID_LxssUserSession,
+                            NULL,
+                            CLSCTX_LOCAL_SERVER,
+                            IID_ILxssUserSession,
+                            (PVOID *)&wslSession);
+    assert(hRes == 0);
+}
+
+bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
+{
+    HRESULT hRes;
+    PWSTR DistributionName, BasePath;
+    PSTR KernelCommandLine, *DefaultEnvironment;
+    ULONG Version, DefaultUid, EnvironmentCount, Flags;
+
+    if (DistroName.empty())
+    {
+        hRes = wslSession->lpVtbl->GetDefaultDistribution(
+            wslSession, DistroId);
+    }
+    else
+    {
+        hRes = wslSession->lpVtbl->GetDistributionId(
+            wslSession, DistroName.c_str(), 0, DistroId);
+    }
+    assert(hRes == 0);
+
+    hRes = wslSession->lpVtbl->GetDistributionConfiguration(
+            wslSession,
+            DistroId,
+            &DistributionName,
+            &Version,
+            &BasePath,
+            &KernelCommandLine,
+            &DefaultUid,
+            &EnvironmentCount,
+            &DefaultEnvironment,
+            &Flags);
+
+    assert(hRes == 0);
+
+    CoTaskMemFree(DistributionName);
+    CoTaskMemFree(BasePath);
+    CoTaskMemFree(KernelCommandLine);
+
+    if (Flags > WSL_DISTRIBUTION_FLAGS_DEFAULT)
+        return true;
+    else
+        return false;
+}
+
+HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
+{
+    HRESULT hRes;
+    GUID InitiatedDistroID;
     LXSS_STD_HANDLES StdHandles = { 0 }; /* StdHandles member must be zero */
     HANDLE LxProcessHandle, ServerHandle;
     SOCKET SockIn, SockOut, SockErr, ServerSocket;
@@ -33,37 +109,6 @@ HRESULT GetVmId(
                                  ProcessParameters->
                                  Reserved2[0];
 
-    hRes = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    assert(hRes == 0);
-
-    hRes = CoInitializeSecurity(nullptr, -1, nullptr, nullptr,
-                                RPC_C_AUTHN_LEVEL_DEFAULT,
-                                SecurityDelegation, nullptr,
-                                EOAC_STATIC_CLOAKING, nullptr);
-    assert(hRes == 0);
-
-    ILxssUserSession *wslSession = nullptr;
-
-    hRes = CoCreateInstance(CLSID_LxssUserSession,
-                            nullptr,
-                            CLSCTX_LOCAL_SERVER,
-                            IID_ILxssUserSession,
-                            (PVOID *)&wslSession);
-    assert(hRes == 0);
-
-    if (DistroName.empty())
-    {
-        hRes = wslSession->lpVtbl->GetDefaultDistribution(
-            wslSession, &DistroId);
-    }
-    else
-    {
-        hRes = wslSession->lpVtbl->GetDistributionId(
-            wslSession, DistroName.c_str(), 0, &DistroId);
-    }
-
-    assert(hRes == 0);
-
     const DWORD BuildNumber = GetWindowsBuild();
 
     /* Before Windows 10 Build 20211 RS */
@@ -71,7 +116,7 @@ HRESULT GetVmId(
     {
         hRes = wslSession->lpVtbl->CreateLxProcess_One(
             wslSession,
-            &DistroId,
+            DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
             nullptr, 0, nullptr, 0, 0,
             HandleToULong(ConsoleHandle),
@@ -90,7 +135,7 @@ HRESULT GetVmId(
         /* After Windows 10 Build 20211 RS */
         hRes = wslSession->lpVtbl->CreateLxProcess_Two(
             wslSession,
-            &DistroId,
+            DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
             nullptr, 0, nullptr, 0, 0,
             HandleToULong(ConsoleHandle),
@@ -106,33 +151,15 @@ HRESULT GetVmId(
             &ServerSocket);
     }
 
-    if (hRes != 0)
-    {
-        *WslVersion = 0;
-        goto Cleanup;
-    }
+    assert(hRes == 0);
 
-    /* ServerHandle is for WSL1. So, nullptr for WSL2. */
-    if (ServerHandle == nullptr)
-    {
-        *WslVersion = WSL_VERSION_TWO;
+    /* wsltty#254: Closes extra shell process. */
+    if (SockIn) closesocket(SockIn);
+    if (SockOut) closesocket(SockOut);
+    if (SockErr) closesocket(SockErr);
+    if (LxProcessHandle) CloseHandle(LxProcessHandle);
+    if (ServerHandle) CloseHandle(ServerHandle);
 
-        /* wsltty#254: Closes extra shell process. */
-        if (SockIn) closesocket(SockIn);
-        if (SockOut) closesocket(SockOut);
-        if (SockErr) closesocket(SockErr);
-    }
-
-    /* ServerSocket is for WSL2. So, zero for WSL1. */
-    if (ServerSocket == 0)
-    {
-        *WslVersion = WSL_VERSION_ONE;
-
-        if (LxProcessHandle) CloseHandle(LxProcessHandle);
-        if (ServerHandle) CloseHandle(ServerHandle);
-    }
-
-Cleanup:
     if (wslSession)
         wslSession->lpVtbl->Release(wslSession);
     CoUninitialize();

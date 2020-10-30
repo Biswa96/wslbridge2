@@ -11,12 +11,8 @@
 #ifndef GETVMID_HPP
 #define GETVMID_HPP
 
-#define WSL_VERSION_ONE 1
-#define WSL_VERSION_TWO 2
-
-HRESULT GetVmId(
-    GUID *LxInstanceID,
-    const std::wstring &DistroName,
-    int *WslVersion);
+void ComInit(void);
+bool IsWslTwo(GUID *DistroId, const std::wstring DistroName);
+HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID);
 
 #endif /* GETVMID_HPP */
