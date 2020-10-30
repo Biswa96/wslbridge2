@@ -11,14 +11,12 @@
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <pty.h>
-#include <pwd.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <termios.h>
 #include <unistd.h>
 #include <wordexp.h>
 
@@ -124,7 +122,7 @@ static void CreateEnvironmentBlock(void)
 
     close(sockfd);
 
-    long dest, gateway;
+    unsigned long int dest, gateway;
     char iface[IF_NAMESIZE];
     char buf[4096];
 
