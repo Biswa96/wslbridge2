@@ -31,7 +31,8 @@ void WindowsSock(void)
 
 SOCKET CreateHvSock(void)
 {
-    const SOCKET sock = socket(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW);
+    const SOCKET sock = WSASocketW(AF_HYPERV, SOCK_STREAM, HV_PROTOCOL_RAW,
+                            NULL, 0, WSA_FLAG_OVERLAPPED);
     assert(sock > 0);
 
     const int suspend = true;
@@ -49,7 +50,8 @@ SOCKET CreateHvSock(void)
 
 SOCKET CreateLocSock(void)
 {
-    const SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const SOCKET sock = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP,
+                            NULL, 0, WSA_FLAG_OVERLAPPED);
     assert(sock > 0);
 
     const int flag = true;
@@ -67,7 +69,7 @@ SOCKET CreateLocSock(void)
 
 SOCKET AcceptHvSock(const SOCKET sock)
 {
-    const SOCKET cSock = accept(sock, NULL, NULL);
+    const SOCKET cSock = WSAAccept(sock, NULL, NULL, NULL, 0);
     assert(cSock > 0);
 
     /* Server socket is no longer needed. */
@@ -77,7 +79,7 @@ SOCKET AcceptHvSock(const SOCKET sock)
 
 SOCKET AcceptLocSock(const SOCKET sock)
 {
-    const SOCKET cSock = accept(sock, NULL, NULL);
+    const SOCKET cSock = WSAAccept(sock, NULL, NULL, NULL, 0);
     assert(cSock > 0);
 
     const int flag = true;
@@ -110,7 +112,8 @@ void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
     memcpy(&addr.VmId, VmId, sizeof addr.VmId);
     memcpy(&addr.ServiceId, &HV_GUID_VSOCK_TEMPLATE, sizeof addr.ServiceId);
     addr.ServiceId.Data1 = port;
-    const int connectRet = connect(sock, (sockaddr*)&addr, sizeof addr);
+    const int connectRet = WSAConnect(sock, (sockaddr*)&addr, sizeof addr,
+                                NULL, NULL, NULL, NULL);
     assert(connectRet == 0);
 }
 
