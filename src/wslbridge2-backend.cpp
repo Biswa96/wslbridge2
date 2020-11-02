@@ -291,36 +291,33 @@ int main(int argc, char *argv[])
             winp.ws_col, winp.ws_row, inputPort, outputPort, controlPort);
     }
 
-    /*
-     * wslbridge2#23: Wait for any child process changed state.
-     * i.e. prevent zombies.
-     */
-    struct sigaction act = {};
-    act.sa_flags = SA_SIGINFO;
-    act.sa_sigaction = [](int sig, siginfo_t *info, void *ucontext)
-    {
-        for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
-            shutdown(ioSockets.sock[i], SHUT_RDWR);
-
-        int status;
-        wait(&status);
-        printf("signal: %d child status: %d child pid: %d\n",
-            sig, status, info->si_pid);
-
-        if (debugMode)
-        {
-            printf("Press any key to continue...\n");
-            getchar();
-        }
-    };
-    sigaction(SIGCHLD, &act, NULL);
-
     int mfd;
     char ptyname[16];
     const pid_t child = forkpty(&mfd, ptyname, NULL, &winp);
 
     if (child > 0) /* parent or master */
     {
+        /*
+         * wslbridge2#23: Wait for any child process changed state.
+         * i.e. prevent zombies. Register sigaction after forkpty (musl).
+         */
+        struct sigaction act = { 0 };
+        act.sa_flags = SA_SIGINFO;
+        act.sa_sigaction = [](int signum, siginfo_t *info, void *ucontext)
+        {
+            for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
+                shutdown(ioSockets.sock[i], SHUT_RDWR);
+
+            int status;
+            wait(&status);
+
+            char str[100];
+            int ret = sprintf(str, "signal: %d child status: %d child pid: %d\n",
+                        signum, status, info->si_pid);
+            ret = write(STDOUT_FILENO, str, ret);
+        };
+        sigaction(SIGCHLD, &act, NULL);
+
         printf("master fd: %d child pid: %d pty name: %s\n",
             mfd, child, ptyname);
 
@@ -467,6 +464,12 @@ int main(int argc, char *argv[])
     /* cleanup */
     for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
         close(ioSockets.sock[i]);
+
+    if (debugMode)
+    {
+        printf("Press any key to continue...\n");
+        getchar();
+    }
 
     return 0;
 }
