@@ -71,7 +71,6 @@ Here are the list of valid options:
 * `-u` or `--user`: Run as the specified user in WSL.
 * `-w` or `--windir`: Changes the working directory to a Windows path.
 * `-W` or `--wsldir`: Changes the working directory to WSL path.
-* `-V` or `--wslver`: Indicates the WSL version of the selected distribution.
 * `-x` or `--xmod`: Shows hidden backend window and debug output.
 
 Always use single quote or double quote to mention any folder path. For paths

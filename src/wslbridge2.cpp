@@ -145,8 +145,6 @@ static void usage(const char *prog)
     "                Changes the working directory to Windows style path\n"
     "  -W, --wsldir  Folder\n"
     "                Changes the working directory to Unix style path\n"
-    "  -V, --wslver  1 or 2\n"
-    "                Indicates the WSL version of the selected distribution\n"
     "  -x, --xmod    Shows hidden backend window and debug output.\n"
     , prog);
     exit(0);
