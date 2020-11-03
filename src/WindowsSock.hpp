@@ -18,7 +18,7 @@ SOCKET CreateLocSock(void);
 SOCKET AcceptHvSock(const SOCKET sock);
 SOCKET AcceptLocSock(const SOCKET sock);
 void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port);
-int ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog);
-int ListenLocSock(const SOCKET sock, const int backlog);
+int ListenHvSock(const SOCKET sock, const GUID *VmId);
+int ListenLocSock(const SOCKET sock);
 
 #endif /* WINDOWSSOCK_HPP */

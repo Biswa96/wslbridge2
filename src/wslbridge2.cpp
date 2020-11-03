@@ -333,9 +333,6 @@ int main(int argc, char *argv[])
         /* Create server to receive random port number */
         serverSock = CreateHvSock();
 
-        /* Listen for only one backend connection */
-        const int initPort = ListenHvSock(serverSock, &VmId, 1);
-
         struct winsize winp = {};
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
 
@@ -347,7 +344,7 @@ int main(int argc, char *argv[])
                 debugMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
-                initPort);
+                ListenHvSock(serverSock, &VmId));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
@@ -368,9 +365,9 @@ int main(int argc, char *argv[])
                 debugMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
-                ListenLocSock(inputSocket, 1),
-                ListenLocSock(outputSocket, 1),
-                ListenLocSock(controlSocket, 1));
+                ListenLocSock(inputSocket),
+                ListenLocSock(outputSocket),
+                ListenLocSock(controlSocket));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }

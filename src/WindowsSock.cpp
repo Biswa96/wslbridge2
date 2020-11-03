@@ -117,7 +117,7 @@ void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
     assert(connectRet == 0);
 }
 
-int ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog)
+int ListenHvSock(const SOCKET sock, const GUID *VmId)
 {
     SOCKADDR_HV addr = {};
     addr.Family = AF_HYPERV;
@@ -138,14 +138,15 @@ int ListenHvSock(const SOCKET sock, const GUID *VmId, const int backlog)
         nretries++;
     }
 
-    const int listenRet = listen(sock, backlog);
+    /* Listen for only one connection. */
+    const int listenRet = listen(sock, 1);
     assert(listenRet == 0);
 
     /* Return port number to caller */
     return port;
 }
 
-int ListenLocSock(const SOCKET sock, const int backlog)
+int ListenLocSock(const SOCKET sock)
 {
     /* Bind to any available port */
     sockaddr_in addr = {};
@@ -155,7 +156,8 @@ int ListenLocSock(const SOCKET sock, const int backlog)
     const int bindRet = bind(sock, (sockaddr*)&addr, sizeof addr);
     assert(bindRet == 0);
 
-    const int listenRet = listen(sock, backlog);
+    /* Listen for only one connection. */
+    const int listenRet = listen(sock, 1);
     assert(listenRet == 0);
 
     int addrLen = sizeof addr;
