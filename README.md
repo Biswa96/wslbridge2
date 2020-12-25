@@ -41,17 +41,12 @@ Download the released stable binaries from [Release page][3]. Or to test
 nightly builds, download the wslbridge2.zip from this [Appveyor project link][5].
 Here are some info about the directories of this project.
 
-### hvsocket: sample C code using Hyper-V sockets
+### samples: sample C code using Hyper-V sockets
 
 Pick up any one of 1. `win_client` & `wsl_server` 2. `win_server` & `wsl_client`.
 Run `wsl.exe` first. Paste the VM ID from the last argument of `wslhost.exe`
 process's command line. Compile the `win_` part in cygwin or msys2 and
 the `wsl_` part in WSL. Run the server part first. It will wait for the client.
-
-### rawpty: use pseudo console with terminal emulators
-
-Run `rawpty.exe wsl.exe` command. This can also be any Windows console program.
-See the sample [screenshot](images/Headless_Mode.PNG) without headless mode.
 
 ### wslbridge2: connect with WSL using network sockets
 
