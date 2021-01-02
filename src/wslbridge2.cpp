@@ -1,20 +1,17 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2020 Biswapriyo Nath.
+ * Copyright (C) 2019-2021 Biswapriyo Nath.
  */
 
-/* DO NOT include winsock.h, conflicts with poll.h. */
+#include <winsock2.h>
 #include <windows.h>
 #include <assert.h>
 #include <getopt.h>
-#include <poll.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
-#ifdef __CYGWIN__
 #include <sys/cygwin.h>
-#endif
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -34,13 +31,6 @@
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
-
-extern "C" {
-WINBASEAPI int WINAPI closesocket(SOCKET s);
-WINBASEAPI int WINAPI recv(SOCKET s, void *buf, int len, int flags);
-WINBASEAPI int WINAPI send(SOCKET s, void *buf, int len, int flags);
-WINBASEAPI int WINAPI WSACleanup(void);
-}
 
 union IoSockets
 {
@@ -62,7 +52,7 @@ static void resize_window(int signum)
 
     /* Send terminal window size to control socket */
     ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
-    send(g_ioSockets.controlSock, &winp, sizeof winp, 0);
+    send(g_ioSockets.controlSock, (char *)&winp, sizeof winp, 0);
 }
 
 static void* send_buffer(void *param)
@@ -70,20 +60,16 @@ static void* send_buffer(void *param)
     int ret;
     char data[1024];
 
-    struct pollfd fds = { STDIN_FILENO, POLLIN, 0 };
-
     while (1)
     {
-        ret = poll(&fds, 1, -1);
-
-        if (fds.revents & POLLIN)
+        ret = read(STDIN_FILENO, data, sizeof data);
+        if (ret < 0)
         {
-            ret = read(STDIN_FILENO, data, sizeof data);
-            if (ret > 0)
-                ret = send(g_ioSockets.inputSock, data, ret, 0);
-            else
-                break;
+            closesocket(g_ioSockets.inputSock);
+            break;
         }
+        if (!send(g_ioSockets.inputSock, data, ret, 0))
+            break;
     }
 
     pthread_exit(&ret);
@@ -98,10 +84,14 @@ static void* receive_buffer(void *param)
     while (1)
     {
         ret = recv(g_ioSockets.outputSock, data, sizeof data, 0);
-        if (ret > 0)
-            ret = write(STDOUT_FILENO, data, ret);
-        else
+        if (ret <= 0)
             break;
+
+        if(!write(STDOUT_FILENO, data, ret))
+        {
+            shutdown(g_ioSockets.outputSock, SD_BOTH);
+            break;
+        }
     }
 
     pthread_exit(&ret);
@@ -161,9 +151,7 @@ int main(int argc, char *argv[])
     if (GetWindowsBuild() < 17763)
         fatal("Windows 10 version is older than minimal requirement.\n");
 
-#ifdef __CYGWIN__
     cygwin_internal(CW_SYNC_WINENV);
-#endif
 
     /*
      * Set time as seed for generation of random port.
@@ -493,7 +481,7 @@ int main(int argc, char *argv[])
         const SOCKET sClient = AcceptHvSock(serverSock);
 
         int randomPort = 0;
-        ret = recv(sClient, &randomPort, sizeof randomPort, 0);
+        ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
         assert(ret > 0);
         closesocket(sClient);
 

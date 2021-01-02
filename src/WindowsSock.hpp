@@ -1,17 +1,16 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) Biswapriyo Nath.
+ * Copyright (C) 2019-2021 Biswapriyo Nath.
+ */
+
+/*
+ * WindowsSock.hpp: Wraps WinSock functions to separate identical Cygwin imports.
  */
 
 #ifndef WINDOWSSOCK_HPP
 #define WINDOWSSOCK_HPP
 
-#ifndef SOCKET
-#define SOCKET size_t
-#endif
-
-/* This wraps WinSock functions to separate identical Cygwin imports */
 void WindowsSock(void);
 SOCKET CreateHvSock(void);
 SOCKET CreateLocSock(void);
