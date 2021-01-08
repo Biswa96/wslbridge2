@@ -55,24 +55,24 @@ Run `wslbridge2.exe`. This requires cygwin or msys2 environment.
 
 ### Options
 
-Running `wslbridge2.exe` will open default shell in default WSL distribution.
-Here are the list of valid options:
+Running `wslbridge2.exe` without any options will open default shell in default
+WSL distribution. Here are the list of valid options:
 
 * `-b` or `--backend`: Overrides the default path of backend binaries.
 * `-d` or `--distribution`: Run the specified distribution.
 * `-e` or `--env`:  Copies Windows environment variable into the WSL.
 * `-h` or `--help`: Show this usage information.
 * `-l` or `--login`: Start a login shell in WSL.
+* `-s` or `--show`: Shows hidden backend window and debug output.
 * `-u` or `--user`: Run as the specified user in WSL.
 * `-w` or `--windir`: Changes the working directory to a Windows path.
 * `-W` or `--wsldir`: Changes the working directory to WSL path.
-* `-x` or `--xmod`: Shows hidden backend window and debug output.
+* `-x` or `--xmod`: Enables X11 forwarding.
 
 Always use single quote or double quote to mention any folder path. For paths
-in WSL, `"~"` can also be used for user's home folder. If no command line is
-provided, this launches the default shell. The non-options arguments will be
-executed as is. For example, `wslbridge2.exe ls` will execute `ls` command
-in current working directory in default WSL distribution.
+in WSL, `"~"` can also be used for user's home folder. The non-options arguments
+will be executed as is. For example, `wslbridge2.exe ls` will execute `ls` in
+current working directory in default WSL distribution.
 
 
 ## Frequently Asked Questions
@@ -83,9 +83,9 @@ See the [FAQ page](FAQ.md) for the answers to commonly asked questions.
 ## Caveats
 
 * The graphics may lag sometimes due to multiple layers of data transitions
-between Windows and WSL side programs.
+between Windows and WSL side programs. Suggestions are welcomed to speed it up.
 
-* There is no documented way to get VM ID from WSL2 Linux VM. See this
+* There is no documented way to get VM ID of running WSL2 utility VM. See this
 [issue](https://github.com/microsoft/WSL/issues/4131). Hence `GetVmId.cpp` will
 change in future Windows 10 releases due to usage of undocumented COM methods.
 

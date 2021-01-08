@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2020 Biswapriyo Nath.
+ * Copyright (C) 2019-2021 Biswapriyo Nath.
  */
 
 #include <arpa/inet.h>
@@ -10,6 +10,7 @@
 #include <net/if.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <pthread.h>
 #include <pty.h>
 #include <signal.h>
 #include <string.h>
@@ -163,8 +164,10 @@ static void usage(const char *prog)
     "  -P, --path dir Starts in certain path\n"
     "  -p, --port N   Sets port N to initialize connections\n"
     "  -r, --rows N   Sets N rows for pty\n"
-    "  -x, --xmod     Enables debug output\n\n",
-    prog);
+    "  -s, --show     Shows hidden backend window and debug output.\n"
+    "  -x, --xmod     Enables X11 forwarding.\n\n"
+    , prog);
+
     exit(0);
 }
 
@@ -185,9 +188,10 @@ struct ChildParams
 /* Structure only to hold socket file descriptors. */
 union IoSockets
 {
-    int sock[3];
+    int sock[4];
     struct
     {
+        int xserverSock;
         int inputSock;
         int outputSock;
         int controlSock;
@@ -196,7 +200,6 @@ union IoSockets
 
 /* Global variable. */
 static volatile union IoSockets ioSockets = { 0 };
-static volatile bool debugMode = false;
 
 int main(int argc, char *argv[])
 {
@@ -206,18 +209,15 @@ int main(int argc, char *argv[])
     int ret;
     struct winsize winp;
     struct ChildParams childParams;
-    bool loginMode = false;
+    volatile bool debugMode = false, loginMode = false, xservMode = false;
 
     /* Ports for WSL1 */
-    int controlPort = -1;
-    int inputPort = -1;
-    int outputPort = -1;
+    int inputPort = -1, outputPort = -1, controlPort = -1;
 
     /* Ports for WSL2 */
-    unsigned int initPort = 0;
-    unsigned int randomPort = 0;
+    unsigned int initPort = 0, randomPort = 0;
 
-    const char shortopts[] = "+0:1:3:c:e:hlp:P:r:x";
+    const char shortopts[] = "+0:1:3:c:e:hlp:P:r:sx";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "env",   required_argument, 0, 'e' },
@@ -226,6 +226,7 @@ int main(int argc, char *argv[])
         { "port",  required_argument, 0, 'p' },
         { "path",  required_argument, 0, 'P' },
         { "rows",  required_argument, 0, 'r' },
+        { "show",  no_argument,       0, 's' },
         { "xmod",  no_argument,       0, 'x' },
         { 0,       no_argument,       0,  0  },
     };
@@ -245,7 +246,8 @@ int main(int argc, char *argv[])
             case 'p': initPort = atoi(optarg); break;
             case 'P': childParams.cwd = optarg; break;
             case 'r': winp.ws_row = atoi(optarg); break;
-            case 'x': debugMode = true; break;
+            case 's': debugMode = true; break;
+            case 'x': xservMode = true; break;
             default: try_help(argv[0]); break;
         }
     }

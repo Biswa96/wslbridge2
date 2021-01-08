@@ -1,6 +1,6 @@
 # This file is part of wslbridge2 project.
 # Licensed under the terms of the GNU General Public License v3 or later.
-# Copyright (C) 2019-2020 Biswapriyo Nath.
+# Copyright (C) 2019-2021 Biswapriyo Nath.
 
 # Makefile for wslbridge2 backend
 
@@ -8,7 +8,7 @@ STRIP ?= strip
 NAME = wslbridge2-backend
 BINDIR = ../bin
 CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -pedantic -std=c++11 -Wall
-LFLAGS = -lutil
+LFLAGS = -pthread -lutil
 
 ifdef RELEASE
 LFLAGS += -static -static-libgcc -static-libstdc++

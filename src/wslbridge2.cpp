@@ -34,9 +34,10 @@
 
 union IoSockets
 {
-    SOCKET sock[3];
+    SOCKET sock[4];
     struct
     {
+        SOCKET xserverSock;
         SOCKET inputSock;
         SOCKET outputSock;
         SOCKET controlSock;
@@ -44,7 +45,7 @@ union IoSockets
 };
 
 /* global variable */
-static volatile union IoSockets g_ioSockets = { 0, 0, 0 };
+static volatile union IoSockets g_ioSockets = { 0 };
 
 static void resize_window(int signum)
 {
@@ -98,10 +99,7 @@ static void* receive_buffer(void *param)
     return nullptr;
 }
 
-struct PipeHandles {
-    HANDLE rh;
-    HANDLE wh;
-};
+struct PipeHandles { HANDLE rh, wh; };
 
 static struct PipeHandles createPipe(void)
 {
@@ -129,14 +127,16 @@ static void usage(const char *prog)
     "  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n"
     "  -h, --help    Show this usage information\n"
     "  -l, --login   Start a login shell.\n"
+    "  -s, --show    Shows hidden backend window and debug output.\n"
     "  -u, --user    WSL User Name\n"
     "                Run as the specified user\n"
     "  -w, --windir  Folder\n"
     "                Changes the working directory to Windows style path\n"
     "  -W, --wsldir  Folder\n"
     "                Changes the working directory to Unix style path\n"
-    "  -x, --xmod    Shows hidden backend window and debug output.\n"
+    "  -x, --xmod    Enables X11 forwarding.\n"
     , prog);
+
     exit(0);
 }
 
@@ -164,30 +164,27 @@ int main(int argc, char *argv[])
     srand(seed);
 
     int ret;
-    const char shortopts[] = "+b:d:e:hlu:w:W:V:x";
+    const char shortopts[] = "+b:d:e:hlsu:V:w:W:x";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
         { "env",           required_argument, 0, 'e' },
         { "help",          no_argument,       0, 'h' },
         { "login",         no_argument,       0, 'l' },
+        { "show",          required_argument, 0, 's' },
         { "user",          required_argument, 0, 'u' },
+        { "wslver",        required_argument, 0, 'V' },
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
-        { "wslver",        required_argument, 0, 'V' },
         { "xmod",          no_argument,       0, 'x' },
         { 0,               no_argument,       0,  0  },
     };
 
     class Environment env;
     class TerminalState termState;
-    std::string distroName;
-    std::string customBackendPath;
-    std::string winDir;
-    std::string wslDir;
-    std::string userName;
-    bool debugMode = false;
-    bool loginMode = false;
+    std::string distroName, customBackendPath;
+    std::string winDir, wslDir, userName;
+    volatile bool debugMode = false, loginMode = false, xservMode = false;
 
     if (argv[0][0] == '-')
         loginMode = true;
@@ -229,20 +226,17 @@ int main(int argc, char *argv[])
                 break;
             }
 
-            case 'h':
-                usage(argv[0]);
-                break;
-
-
-            case 'l':
-                loginMode = true;
-                break;
+            case 'h': usage(argv[0]); break;
+            case 'l': loginMode = true; break;
+            case 's': debugMode = true; break;
 
             case 'u':
                 userName = optarg;
                 if (userName.empty())
                     invalid_arg("user");
                 break;
+
+            case 'V': break; /* empty */
 
             case 'w':
                 winDir = optarg;
@@ -256,13 +250,7 @@ int main(int argc, char *argv[])
                     invalid_arg("wsldir");
                 break;
 
-            case 'V':
-                /* empty */
-                break;
-
-            case 'x':
-                debugMode = true;
-                break;
+            case 'x': xservMode = true; break;
 
             default:
                 fatal("Try '%s --help' for more information.\n", argv[0]);
@@ -326,8 +314,9 @@ int main(int argc, char *argv[])
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
-                L" %ls--cols %d --rows %d --port %d",
-                debugMode ? L"--xmod " : L"",
+                L" %ls%ls--cols %d --rows %d --port %d",
+                debugMode ? L"--show " : L"",
+                xservMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
                 ListenHvSock(serverSock, &VmId));
@@ -348,7 +337,7 @@ int main(int argc, char *argv[])
                 buffer.data(),
                 buffer.size(),
                 L" %ls--cols %d --rows %d -0%d -1%d -3%d",
-                debugMode ? L"--xmod " : L"",
+                debugMode ? L"--show " : L"",
                 winp.ws_col,
                 winp.ws_row,
                 ListenLocSock(inputSocket),
@@ -451,7 +440,8 @@ int main(int argc, char *argv[])
     if (!ret)
         fatal("SetHandleInformation: %s", GetErrorMessage(GetLastError()).c_str());
 
-    const auto watchdog = std::thread([&]() {
+    std::thread watchdog([&]()
+    {
         WaitForSingleObject(pi.hProcess, INFINITE);
 
         std::vector<char> outVec = readAllFromHandle(outputPipe.rh);
