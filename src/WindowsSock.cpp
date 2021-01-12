@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2020 Biswapriyo Nath.
+ * Copyright (C) 2019-2021 Biswapriyo Nath.
  */
 
 #include <winsock2.h>
@@ -55,13 +55,13 @@ SOCKET CreateLocSock(void)
     assert(sock > 0);
 
     const int flag = true;
-    const int nodelayRet = setsockopt(
-                           sock,
-                           IPPROTO_TCP,
-                           TCP_NODELAY,
-                           (char*)&flag,
-                           sizeof flag);
+    const int nodelayRet = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+                            (const char *)&flag, sizeof flag);
     assert(nodelayRet == 0);
+
+    const int reuseRet = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+                            (const char *)&flag, sizeof flag);
+    assert(reuseRet == 0);
 
     /* Return socket to caller */
     return sock;
@@ -83,13 +83,13 @@ SOCKET AcceptLocSock(const SOCKET sock)
     assert(cSock > 0);
 
     const int flag = true;
-    const int nodelayRet = setsockopt(
-                           cSock,
-                           IPPROTO_TCP,
-                           TCP_NODELAY,
-                           (char*)&flag,
-                           sizeof flag);
+    const int nodelayRet = setsockopt(cSock, IPPROTO_TCP, TCP_NODELAY,
+                            (const char *)&flag, sizeof flag);
     assert(nodelayRet == 0);
+
+    const int reuseRet = setsockopt(cSock, SOL_SOCKET, SO_REUSEADDR,
+                            (const char *)&flag, sizeof flag);
+    assert(reuseRet == 0);
 
     /* Server socket is no longer needed. */
     closesocket(sock);
@@ -114,6 +114,17 @@ void ConnectHvSock(const SOCKET sock, const GUID *VmId, const int port)
     addr.ServiceId.Data1 = port;
     const int connectRet = WSAConnect(sock, (sockaddr*)&addr, sizeof addr,
                                 NULL, NULL, NULL, NULL);
+    assert(connectRet == 0);
+}
+
+void ConnectLocSock(const SOCKET sock, const USHORT port)
+{
+    struct sockaddr_in addr = { 0 };
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    const int connectRet = WSAConnect(sock, (const struct sockaddr *)&addr,
+                                sizeof addr, NULL, NULL, NULL, NULL);
     assert(connectRet == 0);
 }
 
@@ -146,12 +157,12 @@ int ListenHvSock(const SOCKET sock, const GUID *VmId)
     return port;
 }
 
-int ListenLocSock(const SOCKET sock)
+int ListenLocSock(const SOCKET sock, const USHORT port)
 {
     /* Bind to any available port */
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(0);
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     const int bindRet = bind(sock, (sockaddr*)&addr, sizeof addr);
     assert(bindRet == 0);

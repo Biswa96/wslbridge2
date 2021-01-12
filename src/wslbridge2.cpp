@@ -340,9 +340,9 @@ int main(int argc, char *argv[])
                 debugMode ? L"--show " : L"",
                 winp.ws_col,
                 winp.ws_row,
-                ListenLocSock(inputSocket),
-                ListenLocSock(outputSocket),
-                ListenLocSock(controlSocket));
+                ListenLocSock(inputSocket, 0),
+                ListenLocSock(outputSocket, 0),
+                ListenLocSock(controlSocket, 0));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
