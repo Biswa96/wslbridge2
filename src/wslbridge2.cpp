@@ -114,28 +114,29 @@ static struct PipeHandles createPipe(void)
 
 static void usage(const char *prog)
 {
-    printf(
-    "Usage: %s [options] [--] [command]...\n"
-    "Runs a program within a Windows Subsystem for Linux (WSL) pty\n"
-    "\n"
-    "Options:\n"
-    "  -b, --backend BACKEND\n"
-    "                Overrides the default path of wslbridge2-backend to BACKEND\n"
-    "  -d, --distribution Distribution Name\n"
-    "                Run the specified distribution.\n"
-    "  -e VAR        Copies VAR into the WSL environment.\n"
-    "  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n"
-    "  -h, --help    Show this usage information\n"
-    "  -l, --login   Start a login shell.\n"
-    "  -s, --show    Shows hidden backend window and debug output.\n"
-    "  -u, --user    WSL User Name\n"
-    "                Run as the specified user\n"
-    "  -w, --windir  Folder\n"
-    "                Changes the working directory to Windows style path\n"
-    "  -W, --wsldir  Folder\n"
-    "                Changes the working directory to Unix style path\n"
-    "  -x, --xmod    Enables X11 forwarding.\n"
-    , prog);
+    printf("\nwslbridge2 %s : Runs a program within a Windows Subsystem for Linux (WSL) pty.\n",
+        STRINGIFY(WSLBRIDGE2_VERSION));
+    printf("Copyright (C) 2019-2021 Biswapriyo Nath.\n");
+    printf("Licensed under GNU General Public License version 3 or later.\n");
+    printf("\n");
+    printf("Usage: %s [options] [--] [command]...\n", prog);
+    printf("Options:\n");
+    printf("  -b, --backend BACKEND\n");
+    printf("                Overrides the default path of wslbridge2-backend to BACKEND.\n");
+    printf("  -d, --distribution Distribution Name\n");
+    printf("                Run the specified distribution.\n");
+    printf("  -e VAR        Copies VAR into the WSL environment.\n");
+    printf("  -e VAR=VAL    Sets VAR to VAL in the WSL environment.\n");
+    printf("  -h, --help    Show this usage information.\n");
+    printf("  -l, --login   Start a login shell.\n");
+    printf("  -s, --show    Shows hidden backend window and debug output.\n");
+    printf("  -u, --user    WSL User Name\n");
+    printf("                Run as the specified user.\n");
+    printf("  -w, --windir  Folder\n");
+    printf("                Changes the working directory to Windows style path.\n");
+    printf("  -W, --wsldir  Folder\n");
+    printf("                Changes the working directory to Unix style path.\n");
+    printf("  -x, --xmod    Enables X11 forwarding.\n");
 
     exit(0);
 }

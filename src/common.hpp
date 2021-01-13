@@ -1,11 +1,16 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019 Biswapriyo Nath.
+ * Copyright (C) 2019-2021 Biswapriyo Nath.
  */
 
 #ifndef COMMON_HPP
 #define COMMON_HPP
+
+#define WSLBRIDGE2_VERSION v0.7
+
+#define XSTRINGIFY(x) #x
+#define STRINGIFY(x) XSTRINGIFY(x)
 
 void fatal(const char *fmt, ...)
     __attribute__((noreturn))

@@ -151,22 +151,23 @@ static void CreateEnvironmentBlock(void)
 
 static void usage(const char *prog)
 {
-    printf(
-    "\nUsage: %s [--] [options] [arguments]\n"
-    "\nbackend for wslbridge2\n"
-    "This backend should not be executed directly without frontend\n\n"
-    "Options:\n"
-    "  -c, --cols N   Sets N columns for pty\n"
-    "  -e, --env VAR  Copies VAR into the WSL environment.\n"
-    "  -e VAR=VAL     Sets VAR to VAL in the WSL environment.\n"
-    "  -h, --help     Shows this usage information\n"
-    "  -l, --login    Starts a login shell\n"
-    "  -P, --path dir Starts in certain path\n"
-    "  -p, --port N   Sets port N to initialize connections\n"
-    "  -r, --rows N   Sets N rows for pty\n"
-    "  -s, --show     Shows hidden backend window and debug output.\n"
-    "  -x, --xmod     Enables X11 forwarding.\n\n"
-    , prog);
+    printf("\nwslbridge2-backend %s : Backend for wslbridge2, should be executed by frontend.\n",
+        STRINGIFY(WSLBRIDGE2_VERSION));
+    printf("Copyright (C) 2019-2021 Biswapriyo Nath.\n");
+    printf("Licensed under GNU General Public License version 3 or later.\n");
+    printf("\n");
+    printf("Usage: %s [options] [--] [command]...\n", prog);
+    printf("Options:\n");
+    printf("  -c, --cols N   Sets N columns for pty.\n");
+    printf("  -e, --env VAR  Copies VAR into the WSL environment.\n");
+    printf("  -e VAR=VAL     Sets VAR to VAL in the WSL environment.\n");
+    printf("  -h, --help     Shows this usage information.\n");
+    printf("  -l, --login    Starts a login shell.\n");
+    printf("  -P, --path dir Starts in certain path.\n");
+    printf("  -p, --port N   Sets port N to initialize connections.\n");
+    printf("  -r, --rows N   Sets N rows for pty.\n");
+    printf("  -s, --show     Shows hidden backend window and debug output.\n");
+    printf("  -x, --xmod     Enables X11 forwarding.\n\n");
 
     exit(0);
 }
