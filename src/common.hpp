@@ -12,6 +12,10 @@
 #define XSTRINGIFY(x) #x
 #define STRINGIFY(x) XSTRINGIFY(x)
 
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
+
 void fatal(const char *fmt, ...)
     __attribute__((noreturn))
     __attribute__((format(printf, 1, 2)));

@@ -4,11 +4,8 @@
  * Copyright (C) 2019-2021 Biswapriyo Nath.
  */
 
-#include <arpa/inet.h>
 #include <assert.h>
 #include <getopt.h>
-#include <net/if.h>
-#include <netinet/tcp.h>
 #include <poll.h>
 #include <pthread.h>
 #include <pty.h>
@@ -24,14 +21,8 @@
 #include <string>
 #include <vector>
 
-/* This requires linux-headers package */
-#include <linux/vm_sockets.h>
-
 #include "common.hpp"
-
-#ifndef ARRAYSIZE
-#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
-#endif
+#include "nix-sock.h"
 
 /* Check if backend is invoked from WSL2 or WSL1 */
 static bool IsVmMode(void)
@@ -41,112 +32,6 @@ static bool IsVmMode(void)
         return true;
     else
         return false;
-}
-
-static int ConnectLocalSock(const int port)
-{
-    const int sockfd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(sockfd > 0);
-
-    const int flag = true;
-    const int nodelayRet = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof flag);
-    assert(nodelayRet == 0);
-
-    sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    const int connectRet = connect(sockfd, (sockaddr*)&addr, sizeof addr);
-    assert(connectRet == 0);
-
-    return sockfd;
-}
-
-/* Return created client socket to send */
-static int ConnectHvSock(const unsigned int initPort)
-{
-    const int sockfd = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(sockfd > 0);
-
-    struct sockaddr_vm addr = {};
-    addr.svm_family = AF_VSOCK;
-    addr.svm_port = initPort;
-    addr.svm_cid = VMADDR_CID_HOST;
-    const int connectRet = connect(sockfd, (sockaddr*)&addr, sizeof addr);
-    assert(connectRet == 0);
-
-    return sockfd;
-}
-
-/* Return socket and random port number */
-static int ListenVsockAnyPort(unsigned int *randomPort, const int backlog)
-{
-    const int sockfd = socket(AF_VSOCK, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    assert(sockfd > 0);
-
-    /* Bind to any available port */
-    struct sockaddr_vm addr = {};
-    addr.svm_family = AF_VSOCK;
-    addr.svm_port = VMADDR_PORT_ANY;
-    addr.svm_cid = VMADDR_CID_ANY;
-    const int bindRet = bind(sockfd, (sockaddr*)&addr, sizeof addr);
-    assert(bindRet == 0);
-
-    socklen_t addrlen = sizeof addr;
-    const int getRet = getsockname(sockfd, (sockaddr*)&addr, &addrlen);
-    assert(getRet == 0);
-
-    const int listenRet = listen(sockfd, backlog);
-    assert(listenRet == 0);
-
-    /* Return port number and socket to caller */
-    *randomPort = addr.svm_port;
-    return sockfd;
-}
-
-/* Set custom environment variables, not so important */
-static void CreateEnvironmentBlock(void)
-{
-    const int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0)
-        perror("socket(AF_INET)");
-
-    struct ifreq ifr;
-    strncpy(ifr.ifr_name, "eth0", IFNAMSIZ);
-    const int ret = ioctl(sockfd, SIOCGIFADDR, &ifr);
-    if (ret != 0)
-        perror("ioctl(SIOCGIFADDR)");
-
-    /* Do not override environment if the name already exists */
-    struct sockaddr_in *addr_in = (struct sockaddr_in *)&ifr.ifr_addr;
-    setenv("WSL_GUEST_IP", inet_ntoa(addr_in->sin_addr), false);
-
-    close(sockfd);
-
-    unsigned long int dest, gateway;
-    char iface[IF_NAMESIZE];
-    char buf[4096];
-
-    memset(iface, 0, sizeof iface);
-    memset(buf, 0, sizeof buf);
-
-    FILE *routeFile = fopen("/proc/net/route", "r");
-
-    while (fgets(buf, sizeof buf, routeFile))
-    {
-        if (sscanf(buf, "%s %lx %lx", iface, &dest, &gateway) == 3)
-        {
-            if (dest == 0) /* default destination */
-            {
-                struct in_addr addr;
-                addr.s_addr = gateway;
-                setenv("WSL_HOST_IP", inet_ntoa(addr), false);
-                break;
-            }
-        }
-    }
-
-    fclose(routeFile);
 }
 
 static void usage(const char *prog)
@@ -266,18 +151,21 @@ int main(int argc, char *argv[])
         if (!initPort)
             fatal("[WSL2] Error: Initialize port is not provided.\n");
 
-        /* First connect to Windows side then send random port */
-        const int client_sock = ConnectHvSock(initPort);
-        const int server_sock = ListenVsockAnyPort(&randomPort, ARRAYSIZE(ioSockets.sock));
+        // Connect to Windows side init port to send random port.
+        const int client_sock = nix_vsock_connect(initPort);
+
+        // Listen to random port to which I/O channels will be connected.
+        const int server_sock = nix_vsock_listen(&randomPort);
+
+        // Send the random port to frontend and close the socket.
         ret = send(client_sock, &randomPort, sizeof randomPort, 0);
         assert(ret > 0);
         close(client_sock);
 
-        /* Now act as a server and accept I/O channels */
+        // Now act as a server and accept I/O channels.
         for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
         {
-            ioSockets.sock[i] = accept4(server_sock, NULL, NULL, SOCK_CLOEXEC);
-            assert(ioSockets.sock[i] > 0);
+            ioSockets.sock[i] = nix_vsock_accept(server_sock);
         }
         close(server_sock);
 
@@ -286,9 +174,12 @@ int main(int argc, char *argv[])
     }
     else /* WSL1 */
     {
-        ioSockets.inputSock = ConnectLocalSock(inputPort);
-        ioSockets.outputSock = ConnectLocalSock(outputPort);
-        ioSockets.controlSock = ConnectLocalSock(controlPort);
+        if (!inputPort || !outputPort || !controlPort)
+            fatal("[WSL1] Error: I/O ports are not provided.\n");
+
+        ioSockets.inputSock = nix_local_connect(inputPort);
+        ioSockets.outputSock = nix_local_connect(outputPort);
+        ioSockets.controlSock = nix_local_connect(controlPort);
 
         printf("cols: %d rows: %d in: %d out: %d con: %d\n",
             winp.ws_col, winp.ws_row, inputPort, outputPort, controlPort);
@@ -400,7 +291,7 @@ int main(int argc, char *argv[])
          * As WSL1 gets same IP address as Windows and NIC may not be eth0.
          */
         if (vmMode)
-            CreateEnvironmentBlock();
+            nix_set_env();
 
         /* Changed directory should affect in child process */
         if (!childParams.cwd.empty())

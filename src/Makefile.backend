@@ -4,31 +4,34 @@
 
 # Makefile for wslbridge2 backend
 
-STRIP ?= strip
 NAME = wslbridge2-backend
 BINDIR = ../bin
-CFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -pedantic -std=c++11 -Wall
-LFLAGS = -pthread -lutil
+CFLAGS = -D_GNU_SOURCE -O2 -std=c99 -Wall -Wpedantic
+CXXFLAGS = -D_GNU_SOURCE -fno-exceptions -O2 -std=c++11 -Wall -Wpedantic
+LDFLAGS = -pthread -lutil
 
 ifdef RELEASE
-LFLAGS += -static -static-libgcc -static-libstdc++
+LDFLAGS += -static -static-libgcc -static-libstdc++
 endif
 
-BINS = \
+OBJS = \
 $(BINDIR)/common.o \
+$(BINDIR)/nix-sock.o \
 $(BINDIR)/wslbridge2-backend.o
 
 all : $(BINDIR) $(NAME)
 
-$(NAME) : $(BINS)
-	$(CXX) $^ $(LFLAGS) -o $(BINDIR)/$@
-	$(STRIP) $(BINDIR)/$@
+$(NAME) : $(OBJS)
+	$(CXX) -s $^ $(LDFLAGS) -o $(BINDIR)/$@
 
 $(BINDIR)/common.o : common.cpp
-	$(CXX) -c $(CFLAGS) $< -o $@
+	$(CXX) -c $(CXXFLAGS) $< -o $@
+
+$(BINDIR)/nix-sock.o : nix-sock.c
+	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/wslbridge2-backend.o : wslbridge2-backend.cpp
-	$(CXX) -c $(CFLAGS) $< -o $@
+	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 $(BINDIR) :
 	mkdir -p $(BINDIR)
