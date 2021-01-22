@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2020 Biswapriyo Nath
+ * Copyright (C) 2019-2021 Biswapriyo Nath
  */
 
 /*
@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <string>
 
+#include "common.hpp"
 #include "GetVmId.hpp"
 #include "LxssUserSession.hpp"
 #include "Helpers.hpp"
@@ -70,6 +71,11 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
         hRes = wslSession->lpVtbl->GetDistributionId(
             wslSession, DistroName.c_str(), 0, DistroId);
     }
+
+    // Custom error code from LxssManager COM interface.
+    if (hRes == (HRESULT)0x80040302)
+        fatal("There is no distribution with the supplied name.\n");
+
     assert(hRes == 0);
 
     hRes = wslSession->lpVtbl->GetDistributionConfiguration(
@@ -100,10 +106,15 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
 {
     HRESULT hRes;
     GUID InitiatedDistroID;
-    LXSS_STD_HANDLES StdHandles = { 0 }; /* StdHandles member must be zero */
     HANDLE LxProcessHandle, ServerHandle;
     SOCKET SockIn, SockOut, SockErr, ServerSocket;
 
+    // Initialize StdHandles members to be console handles by default.
+    // otherwise LxssManager will catch undefined values.
+    LXSS_STD_HANDLES StdHandles;
+    memset(&StdHandles, 0, sizeof StdHandles);
+
+    // Provides \Device\ConDrv\Connect interface of attached ConHost.
     const HANDLE ConsoleHandle = NtCurrentTeb()->
                                  ProcessEnvironmentBlock->
                                  ProcessParameters->
