@@ -26,11 +26,7 @@
 #include "Helpers.hpp"
 #include "Environment.hpp"
 #include "TerminalState.hpp"
-#include "WindowsSock.hpp"
-
-#ifndef ARRAYSIZE
-#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
-#endif
+#include "windows-sock.h"
 
 union IoSockets
 {
@@ -136,7 +132,7 @@ static void usage(const char *prog)
     printf("                Changes the working directory to Windows style path.\n");
     printf("  -W, --wsldir  Folder\n");
     printf("                Changes the working directory to Unix style path.\n");
-    printf("  -x, --xmod    Enables X11 forwarding.\n");
+    printf("  -x, --xmod    Enables X11 forwarding (unimplemented).\n");
 
     exit(0);
 }
@@ -156,7 +152,7 @@ int main(int argc, char *argv[])
 
     /*
      * Set time as seed for generation of random port.
-     * wslbridge2 #24 and #27: Add aditional entropy
+     * wslbridge2 #24 and #27: Add additional entropy
      * to randomize port even in a split of seconds.
      */
     struct timeval tv;
@@ -285,16 +281,13 @@ int main(int argc, char *argv[])
     }
 
     /* Initialize WinSock. */
-    WindowsSock();
+    win_sock_init();
 
-    /* Intialize COM. */
+    /* Initialize COM. */
     ComInit();
 
     GUID DistroId, VmId;
-    SOCKET serverSock = 0;
-    SOCKET inputSocket = 0;
-    SOCKET outputSocket = 0;
-    SOCKET controlSocket = 0;
+    SOCKET serverSock = 0, inputSock = 0, outputSock = 0, controlSock = 0;
 
     /* Detect WSL version. Assume distroName is initialized empty. */
     const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName));
@@ -306,7 +299,7 @@ int main(int argc, char *argv[])
             fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
 
         /* Create server to receive random port number */
-        serverSock = CreateHvSock();
+        serverSock = win_vsock_create();
 
         struct winsize winp = {};
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
@@ -320,15 +313,15 @@ int main(int argc, char *argv[])
                 xservMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
-                ListenHvSock(serverSock, &VmId));
+                win_vsock_listen(serverSock, &VmId));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
     else /* WSL1: use localhost IPv4 sockets. */
     {
-        inputSocket = CreateLocSock();
-        outputSocket = CreateLocSock();
-        controlSocket = CreateLocSock();
+        inputSock = win_local_create();
+        outputSock = win_local_create();
+        controlSock = win_local_create();
 
         struct winsize winp = {};
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
@@ -341,9 +334,9 @@ int main(int argc, char *argv[])
                 debugMode ? L"--show " : L"",
                 winp.ws_col,
                 winp.ws_row,
-                ListenLocSock(inputSocket, 0),
-                ListenLocSock(outputSocket, 0),
-                ListenLocSock(controlSocket, 0));
+                win_local_listen(inputSock, 0),
+                win_local_listen(outputSock, 0),
+                win_local_listen(controlSock, 0));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
@@ -469,25 +462,22 @@ int main(int argc, char *argv[])
 
     if (wslTwo)
     {
-        const SOCKET sClient = AcceptHvSock(serverSock);
+        const SOCKET sClient = win_vsock_accept(serverSock);
 
-        int randomPort = 0;
+        unsigned int randomPort = 0;
         ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
         assert(ret > 0);
         closesocket(sClient);
 
         /* Create I/O sockets and connect with WSL server */
         for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
-        {
-            g_ioSockets.sock[i] = CreateHvSock();
-            ConnectHvSock(g_ioSockets.sock[i], &VmId, randomPort);
-        }
+            g_ioSockets.sock[i] = win_vsock_connect(&VmId, randomPort);
     }
     else
     {
-        g_ioSockets.inputSock = AcceptLocSock(inputSocket);
-        g_ioSockets.outputSock = AcceptLocSock(outputSocket);
-        g_ioSockets.controlSock = AcceptLocSock(controlSocket);
+        g_ioSockets.inputSock = win_local_accept(inputSock);
+        g_ioSockets.outputSock = win_local_accept(outputSock);
+        g_ioSockets.controlSock = win_local_accept(controlSock);
     }
 
     /* Capture window resize signal and send buffer to control socket */
