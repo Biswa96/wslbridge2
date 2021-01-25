@@ -173,15 +173,17 @@ int win_vsock_listen(const SOCKET sock, const GUID *VmId)
         port = RANDOMPORT();
         addr.ServiceId.Data1 = port;
         const int bindRet = bind(sock, (struct sockaddr *)&addr, sizeof addr);
-        if (bindRet == 0)
+
+        // Listen for only one connection.
+        const int listenRet = listen(sock, 1);
+
+        // Check return value for both bind() AND listen() APIs. Because
+        // bind() allows same port with AF_HYPERV but listen() does not.
+        if ((bindRet == 0) && (listenRet == 0))
             break;
 
         nretries++;
     }
-
-    // Listen for only one connection.
-    const int listenRet = listen(sock, 1);
-    assert(listenRet == 0);
 
     return port;
 }
