@@ -155,10 +155,12 @@ int main(int argc, char *argv[])
      * wslbridge2 #24 and #27: Add additional entropy
      * to randomize port even in a split of seconds.
      */
+    {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     long seed = tv.tv_usec << 16 | (getpid() & 0xFFFF);
     srand(seed);
+    }
 
     int ret;
     const char shortopts[] = "+b:d:e:hlsu:V:w:W:x";
@@ -287,7 +289,7 @@ int main(int argc, char *argv[])
     ComInit();
 
     GUID DistroId, VmId;
-    SOCKET serverSock = 0, inputSock = 0, outputSock = 0, controlSock = 0;
+    SOCKET inputSock = 0, outputSock = 0, controlSock = 0;
 
     /* Detect WSL version. Assume distroName is initialized empty. */
     const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName));
@@ -298,8 +300,9 @@ int main(int argc, char *argv[])
         if (hRes != 0)
             fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
 
-        /* Create server to receive random port number */
-        serverSock = win_vsock_create();
+        inputSock = win_vsock_create();
+        outputSock = win_vsock_create();
+        controlSock = win_vsock_create();
 
         struct winsize winp = {};
         ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
@@ -308,12 +311,14 @@ int main(int argc, char *argv[])
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
-                L" %ls%ls--cols %d --rows %d --port %d",
+                L" %ls%ls--cols %d --rows %d -0%d -1%d -3%d",
                 debugMode ? L"--show " : L"",
                 xservMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
-                win_vsock_listen(serverSock, &VmId));
+                win_vsock_listen(inputSock, &VmId),
+                win_vsock_listen(outputSock, &VmId),
+                win_vsock_listen(controlSock, &VmId));
         assert(ret > 0);
         wslCmdLine.append(buffer.data());
     }
@@ -462,16 +467,9 @@ int main(int argc, char *argv[])
 
     if (wslTwo)
     {
-        const SOCKET sClient = win_vsock_accept(serverSock);
-
-        unsigned int randomPort = 0;
-        ret = recv(sClient, (char *)&randomPort, sizeof randomPort, 0);
-        assert(ret > 0);
-        closesocket(sClient);
-
-        /* Create I/O sockets and connect with WSL server */
-        for (size_t i = 0; i < ARRAYSIZE(g_ioSockets.sock); i++)
-            g_ioSockets.sock[i] = win_vsock_connect(&VmId, randomPort);
+        g_ioSockets.inputSock = win_vsock_accept(inputSock);
+        g_ioSockets.outputSock = win_vsock_accept(outputSock);
+        g_ioSockets.controlSock = win_vsock_accept(controlSock);
     }
     else
     {
@@ -481,11 +479,14 @@ int main(int argc, char *argv[])
     }
 
     /* Capture window resize signal and send buffer to control socket */
-    struct sigaction act = {};
+    {
+    struct sigaction act;
+    memset(&act, 0, sizeof act);
     act.sa_handler = resize_window;
     act.sa_flags = SA_RESTART;
     ret = sigaction(SIGWINCH, &act, NULL);
     assert(ret == 0);
+    }
 
     /* Create thread to send input buffer to input socket */
     pthread_t tidInput;

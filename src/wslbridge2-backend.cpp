@@ -48,8 +48,7 @@ static void usage(const char *prog)
     printf("  -e VAR=VAL     Sets VAR to VAL in the WSL environment.\n");
     printf("  -h, --help     Shows this usage information.\n");
     printf("  -l, --login    Starts a login shell.\n");
-    printf("  -P, --path dir Starts in certain path.\n");
-    printf("  -p, --port N   Sets port N to initialize connections.\n");
+    printf("  -p, --path dir Starts in certain path.\n");
     printf("  -r, --rows N   Sets N rows for pty.\n");
     printf("  -s, --show     Shows hidden backend window and debug output.\n");
     printf("  -x, --xmod     Enables X11 forwarding.\n\n");
@@ -96,21 +95,15 @@ int main(int argc, char *argv[])
     struct winsize winp;
     struct ChildParams childParams;
     volatile bool debugMode = false, loginMode = false, xservMode = false;
+    unsigned int inputPort = 0, outputPort = 0, controlPort = 0;
 
-    /* Ports for WSL1 */
-    int inputPort = -1, outputPort = -1, controlPort = -1;
-
-    /* Ports for WSL2 */
-    unsigned int initPort = 0, randomPort = 0;
-
-    const char shortopts[] = "+0:1:3:c:e:hlp:P:r:sx";
+    const char shortopts[] = "+0:1:3:c:e:hlp:r:sx";
     const struct option longopts[] = {
         { "cols",  required_argument, 0, 'c' },
         { "env",   required_argument, 0, 'e' },
         { "help",  no_argument,       0, 'h' },
         { "login", no_argument,       0, 'l' },
-        { "port",  required_argument, 0, 'p' },
-        { "path",  required_argument, 0, 'P' },
+        { "path",  required_argument, 0, 'p' },
         { "rows",  required_argument, 0, 'r' },
         { "show",  no_argument,       0, 's' },
         { "xmod",  no_argument,       0, 'x' },
@@ -129,8 +122,7 @@ int main(int argc, char *argv[])
             case 'e': childParams.env.push_back(strdup(optarg)); break;
             case 'h': usage(argv[0]); break;
             case 'l': loginMode = true; break;
-            case 'p': initPort = atoi(optarg); break;
-            case 'P': childParams.cwd = optarg; break;
+            case 'p': childParams.cwd = optarg; break;
             case 'r': winp.ws_row = atoi(optarg); break;
             case 's': debugMode = true; break;
             case 'x': xservMode = true; break;
@@ -148,42 +140,19 @@ int main(int argc, char *argv[])
     const bool vmMode = IsVmMode();
     if (vmMode) /* WSL2 */
     {
-        if (!initPort)
-            fatal("[WSL2] Error: Initialize port is not provided.\n");
-
-        // Connect to Windows side init port to send random port.
-        const int client_sock = nix_vsock_connect(initPort);
-
-        // Listen to random port to which I/O channels will be connected.
-        const int server_sock = nix_vsock_listen(&randomPort);
-
-        // Send the random port to frontend and close the socket.
-        ret = send(client_sock, &randomPort, sizeof randomPort, 0);
-        assert(ret > 0);
-        close(client_sock);
-
-        // Now act as a server and accept I/O channels.
-        for (size_t i = 0; i < ARRAYSIZE(ioSockets.sock); i++)
-        {
-            ioSockets.sock[i] = nix_vsock_accept(server_sock);
-        }
-        close(server_sock);
-
-        printf("cols: %d rows: %d initPort: %d randomPort: %u\n",
-            winp.ws_col, winp.ws_row, initPort, randomPort);
+        ioSockets.inputSock = nix_vsock_connect(inputPort);
+        ioSockets.outputSock = nix_vsock_connect(outputPort);
+        ioSockets.controlSock = nix_vsock_connect(controlPort);
     }
     else /* WSL1 */
     {
-        if (!inputPort || !outputPort || !controlPort)
-            fatal("[WSL1] Error: I/O ports are not provided.\n");
-
         ioSockets.inputSock = nix_local_connect(inputPort);
         ioSockets.outputSock = nix_local_connect(outputPort);
         ioSockets.controlSock = nix_local_connect(controlPort);
-
-        printf("cols: %d rows: %d in: %d out: %d con: %d\n",
-            winp.ws_col, winp.ws_row, inputPort, outputPort, controlPort);
     }
+
+    printf("cols: %d rows: %d in: %d out: %d con: %d\n",
+        winp.ws_col, winp.ws_row, inputPort, outputPort, controlPort);
 
     int mfd;
     char ptyname[16];
