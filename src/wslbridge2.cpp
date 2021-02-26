@@ -148,6 +148,8 @@ int main(int argc, char *argv[])
     if (GetWindowsBuild() < 17763)
         fatal("Windows 10 version is older than minimal requirement.\n");
 
+    /* wsltty#273: Make portable to all locales. */
+    setlocale(LC_ALL, "");
     cygwin_internal(CW_SYNC_WINENV);
 
     /*
