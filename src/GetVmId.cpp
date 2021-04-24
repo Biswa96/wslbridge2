@@ -78,7 +78,10 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
 
     assert(hRes == 0);
 
-    hRes = wslSession->lpVtbl->GetDistributionConfiguration(
+    /* Before Build 21313 Co */
+    if (GetWindowsBuild() < 21313)
+    {
+        hRes = wslSession->lpVtbl->GetDistributionConfiguration_One(
             wslSession,
             DistroId,
             &DistributionName,
@@ -90,11 +93,26 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
             &DefaultEnvironment,
             &Flags);
 
+        CoTaskMemFree(BasePath);
+        CoTaskMemFree(KernelCommandLine);
+    }
+    else
+    {
+        /* After Build 21313 Co */
+        hRes = wslSession->lpVtbl->GetDistributionConfiguration_Two(
+            wslSession,
+            DistroId,
+            &DistributionName,
+            &Version,
+            &DefaultUid,
+            &EnvironmentCount,
+            &DefaultEnvironment,
+            &Flags);
+    }
+
     assert(hRes == 0);
 
     CoTaskMemFree(DistributionName);
-    CoTaskMemFree(BasePath);
-    CoTaskMemFree(KernelCommandLine);
 
     if (Flags > WSL_DISTRIBUTION_FLAGS_DEFAULT)
         return true;
@@ -120,10 +138,8 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
                                  ProcessParameters->
                                  Reserved2[0];
 
-    const DWORD BuildNumber = GetWindowsBuild();
-
-    /* Before Windows 10 Build 20211 RS */
-    if (BuildNumber < 20211)
+    /* Before Build 20211 Fe */
+    if (GetWindowsBuild() < 20211)
     {
         hRes = wslSession->lpVtbl->CreateLxProcess_One(
             wslSession,
@@ -143,7 +159,7 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
     }
     else
     {
-        /* After Windows 10 Build 20211 RS */
+        /* After Build 20211 Fe */
         hRes = wslSession->lpVtbl->CreateLxProcess_Two(
             wslSession,
             DistroId,

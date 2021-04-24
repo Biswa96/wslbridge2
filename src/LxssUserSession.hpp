@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2020 Biswapriyo Nath.
+ * Copyright (C) 2020-2021 Biswapriyo Nath.
  */
 
 /*
@@ -40,6 +40,31 @@ typedef struct _LXSS_STD_HANDLES
 
 /* Forward declaration of interface structure */
 typedef struct _ILxssUserSession ILxssUserSession;
+
+typedef HRESULT
+(STDMETHODCALLTYPE *GET_DISTRO_CONFIG_ONE)(
+        /*_In_*/ ILxssUserSession *wslSession,
+        /*_In_opt_*/ GUID *DistroId,
+        /*_Out_*/ PWSTR *DistributionName,
+        /*_Out_*/ PULONG Version,
+        /*_Out_*/ PWSTR *BasePath,
+        /*_Out_*/ PSTR *KernelCommandLine,
+        /*_Out_*/ PULONG DefaultUid,
+        /*_Out_*/ PULONG EnvironmentCount,
+        /*_Out_*/ PSTR **DefaultEnvironment,
+        /*_Out_*/ PULONG Flags);
+
+/* Build 21313: Removed BasePath and KernelCommandLine. */
+typedef HRESULT
+(STDMETHODCALLTYPE *GET_DISTRO_CONFIG_TWO)(
+        /*_In_*/ ILxssUserSession *wslSession,
+        /*_In_opt_*/ GUID *DistroId,
+        /*_Out_*/ PWSTR *DistributionName,
+        /*_Out_*/ PULONG Version,
+        /*_Out_*/ PULONG DefaultUid,
+        /*_Out_*/ PULONG EnvironmentCount,
+        /*_Out_*/ PSTR **DefaultEnvironment,
+        /*_Out_*/ PULONG Flags);
 
 typedef HRESULT
 (STDMETHODCALLTYPE *CREATE_LX_PROCESS_ONE)(
@@ -123,17 +148,15 @@ struct _ILxssUserSessionVtbl
     void *UnregisterDistribution;
     void *ConfigureDistribution;
 
-    HRESULT(STDMETHODCALLTYPE *GetDistributionConfiguration)(
-        /*_In_*/ ILxssUserSession *wslSession,
-        /*_In_opt_*/ GUID *DistroId,
-        /*_Out_*/ PWSTR *DistributionName,
-        /*_Out_*/ PULONG Version,
-        /*_Out_*/ PWSTR *BasePath,
-        /*_Out_*/ PSTR *KernelCommandLine,
-        /*_Out_*/ PULONG DefaultUid,
-        /*_Out_*/ PULONG EnvironmentCount,
-        /*_Out_*/ PSTR **DefaultEnvironment,
-        /*_Out_*/ PULONG Flags);
+    /* WARNING: Black magic here. */
+    union
+    {
+        /* Before Build 21313 Co */
+        GET_DISTRO_CONFIG_ONE GetDistributionConfiguration_One;
+
+        /* After Build 21313 Co */
+        GET_DISTRO_CONFIG_TWO GetDistributionConfiguration_Two;
+    };
 
     HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
         ILxssUserSession *This,
@@ -145,10 +168,10 @@ struct _ILxssUserSessionVtbl
     /* WARNING: Black magic here. */
     union
     {
-        /* Before Windows 10 Build 20211 RS */
+        /* Before Build 20211 Fe */
         CREATE_LX_PROCESS_ONE CreateLxProcess_One;
 
-        /* After Windows 10 Build 20211 RS */
+        /* After Build 20211 Fe */
         CREATE_LX_PROCESS_TWO CreateLxProcess_Two;
     };
 
