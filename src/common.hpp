@@ -7,7 +7,7 @@
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
-#define WSLBRIDGE2_VERSION v0.7
+#define WSLBRIDGE2_VERSION v0.8
 
 #define XSTRINGIFY(x) #x
 #define STRINGIFY(x) XSTRINGIFY(x)
