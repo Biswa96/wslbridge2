@@ -269,18 +269,47 @@ int main(int argc, char *argv[])
 
     /* Prepare the backend command line. */
     std::wstring wslCmdLine;
-    wslCmdLine.append(L"exec \"$(wslpath -u");
-    appendWslArg(wslCmdLine, backendPathWin);
-    wslCmdLine.append(L")\"");
+    if (pythonMode)
+    {
+        wslCmdLine.append(L" @(\"exec '{bridge}' {args}\".format(bridge=$(wslpath -u r\"");
+        wslCmdLine.append(backendPathWin);
+        wslCmdLine.append(L"\").rstrip(), args=\"");
+    }
+    else
+    {
+        wslCmdLine.append(L"exec \"$(wslpath -u");
+        appendWslArg(wslCmdLine, backendPathWin);
+        wslCmdLine.append(L")\"");
+    }
+
 
     for (const auto &envPair : env.pairs())
     {
-        appendWslArg(wslCmdLine, L"--env");
-        appendWslArg(wslCmdLine, envPair.first + L"=" + envPair.second);
+        if (pythonMode)
+        {
+            wslCmdLine.append(L" --env ");
+            wslCmdLine.append(envPair.first + L"=" + envPair.second);
+        }
+        else
+        {
+            appendWslArg(wslCmdLine, L"--env");
+            appendWslArg(wslCmdLine, envPair.first + L"=" + envPair.second);
+        }
+
     }
 
     if (loginMode)
-        appendWslArg(wslCmdLine, L"--login");
+    {
+        if (pythonMode)
+        {
+            wslCmdLine.append(L" --login ");
+        }
+        else
+        {
+            appendWslArg(wslCmdLine, L"--login");
+        }
+    }
+
 
     if (!wslDir.empty())
     {
@@ -354,9 +383,29 @@ int main(int argc, char *argv[])
     }
 
     /* Append remaining non-option arguments as is */
-    appendWslArg(wslCmdLine, L"--");
+    if (pythonMode)
+    {
+        wslCmdLine.append(L" -- ");
+    }
+    else
+    {
+        appendWslArg(wslCmdLine, L"--");
+    }
     for (int i = optind; i < argc; ++i)
-        appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
+    {
+        if (pythonMode)
+        {
+            wslCmdLine.append(mbsToWcs(argv[i]));
+        }
+        else
+        {
+            appendWslArg(wslCmdLine, mbsToWcs(argv[i]));
+        }
+    }
+    if (pythonMode)
+    {
+        wslCmdLine.append(L" \") )");
+    }
 
     /* Append wsl.exe options and its arguments */
     std::wstring cmdLine;
@@ -385,7 +434,14 @@ int main(int argc, char *argv[])
     }
 
     cmdLine.append(L" /bin/sh -c");
-    appendWslArg(cmdLine, wslCmdLine);
+    if (pythonMode)
+    {
+        cmdLine.append(wslCmdLine);
+    }
+    else
+    {
+        appendWslArg(cmdLine, wslCmdLine);
+    }
 
     if (debugMode)
         wprintf(L"Backend CommandLine: %ls\n", &cmdLine[0]);
