@@ -126,6 +126,8 @@ static void usage(const char *prog)
     printf("  -h, --help    Show this usage information.\n");
     printf("  -l, --login   Start a login shell.\n");
     printf("  -s, --show    Shows hidden backend window and debug output.\n");
+    printf("  -p, --python  Translate command line syntax from sh to Python\n");
+    printf("                Use when xonsh is the default shell (overrides auto detection).\n");
     printf("  -u, --user    WSL User Name\n");
     printf("                Run as the specified user.\n");
     printf("  -w, --windir  Folder\n");
@@ -165,7 +167,7 @@ int main(int argc, char *argv[])
     }
 
     int ret;
-    const char shortopts[] = "+b:d:e:hlsu:V:w:W:x";
+    const char shortopts[] = "+b:d:e:hlsup:V:w:W:x";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
@@ -174,6 +176,7 @@ int main(int argc, char *argv[])
         { "login",         no_argument,       0, 'l' },
         { "show",          required_argument, 0, 's' },
         { "user",          required_argument, 0, 'u' },
+        { "python",        required_argument, 0, 'p' },
         { "wslver",        required_argument, 0, 'V' },
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
@@ -185,7 +188,7 @@ int main(int argc, char *argv[])
     class TerminalState termState;
     std::string distroName, customBackendPath;
     std::string winDir, wslDir, userName;
-    volatile bool debugMode = false, loginMode = false, xservMode = false;
+    volatile bool debugMode = false, loginMode = false, xservMode = false, pythonMode = false;
 
     if (argv[0][0] == '-')
         loginMode = true;
@@ -230,6 +233,8 @@ int main(int argc, char *argv[])
             case 'h': usage(argv[0]); break;
             case 'l': loginMode = true; break;
             case 's': debugMode = true; break;
+
+            case 'p': pythonMode = true; break;
 
             case 'u':
                 userName = optarg;

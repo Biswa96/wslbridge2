@@ -64,6 +64,7 @@ WSL distribution. Here are the list of valid options:
 * `-h` or `--help`: Show this usage information.
 * `-l` or `--login`: Start a login shell in WSL.
 * `-s` or `--show`: Shows hidden backend window and debug output.
+* `-p` or `--python`: Translates command line syntax from sh to Python (use when xonsh is the default shell)
 * `-u` or `--user`: Run as the specified user in WSL.
 * `-w` or `--windir`: Changes the working directory to a Windows path.
 * `-W` or `--wsldir`: Changes the working directory to WSL path.
