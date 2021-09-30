@@ -267,6 +267,140 @@ int main(int argc, char *argv[])
     const std::wstring backendPathWin = normalizePath(
                 findBackendProgram(customBackendPath, L"wslbridge2-backend"));
 
+    /* Get the default shell's name and set pythonMode if it's xonsh */
+    if (!pythonMode)
+    {
+        /* Prepare the wsl command line. */
+        std::wstring wslCmdLine;
+        wslCmdLine.append(L"grep \"^$(id -un)\": /etc/passwd");
+
+        /* Append wsl.exe options and its arguments */
+        std::wstring cmdLine;
+        cmdLine.append(L"\"");
+        cmdLine.append(wslPath);
+        cmdLine.append(L"\"");
+
+        if (!distroName.empty())
+        {
+            cmdLine.append(L" -d ");
+            cmdLine.append(mbsToWcs(distroName));
+        }
+
+        /* Taken from HKCU\Directory\Background\shell\WSL\command */
+        if (!winDir.empty())
+        {
+            cmdLine.append(L" --cd \"");
+            cmdLine.append(mbsToWcs(winDir));
+            cmdLine.append(L"\"");
+        }
+
+        if (!userName.empty())
+        {
+            cmdLine.append(L" --user ");
+            cmdLine.append(mbsToWcs(userName));
+        }
+
+        cmdLine.append(L" /bin/sh -c");
+        appendWslArg(cmdLine, wslCmdLine);
+
+        if (debugMode)
+            wprintf(L"GetCurrentShell CommandLine: %ls\n", &cmdLine[0]);
+
+        const struct PipeHandles outputPipe = createPipe();
+        const struct PipeHandles errorPipe = createPipe();
+
+        /* Initialize thread attribute list to inherit pipe handles. */
+        HANDLE Values[2] = { outputPipe.wh, errorPipe.wh };
+        SIZE_T AttrSize;
+        LPPROC_THREAD_ATTRIBUTE_LIST AttrList = NULL;
+        InitializeProcThreadAttributeList(NULL, 1, 0, &AttrSize);
+        AttrList = (LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, AttrSize);
+        InitializeProcThreadAttributeList(AttrList, 1, 0, &AttrSize);
+        ret = UpdateProcThreadAttribute(
+                AttrList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, /* 0x20002u */
+                Values, sizeof Values, NULL, NULL);
+        if (!ret)
+            fatal("UpdateProcThreadAttribute: %s", GetErrorMessage(GetLastError()).c_str());
+
+        DWORD CreationFlags = EXTENDED_STARTUPINFO_PRESENT;
+        PROCESS_INFORMATION pi = {};
+        STARTUPINFOEXW si = {};
+        si.StartupInfo.cb = sizeof si;
+        CreationFlags |= CREATE_NO_WINDOW;
+        si.lpAttributeList = AttrList;
+        si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+        si.StartupInfo.hStdOutput = outputPipe.wh;
+        si.StartupInfo.hStdError = errorPipe.wh;
+
+        ret = CreateProcessW(
+                wslPath.c_str(),
+                &cmdLine[0],
+                NULL,
+                NULL,
+                TRUE,
+                CreationFlags,
+                NULL,
+                NULL,
+                &si.StartupInfo,
+                &pi);
+        if (!ret)
+            fatal("CreateProcessW: %s", GetErrorMessage(GetLastError()).c_str());
+
+        HeapFree(GetProcessHeap(), 0, AttrList);
+        CloseHandle(outputPipe.wh);
+        CloseHandle(errorPipe.wh);
+        ret = SetHandleInformation(pi.hProcess, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+        if (!ret)
+            fatal("SetHandleInformation: %s", GetErrorMessage(GetLastError()).c_str());
+
+        std::string shellCurrent = "";
+        std::string shellXonsh = "xonsh";
+        const int shellNameLen = 7; // 5 'xonsh' + 1 newline + 1 extra
+
+        std::thread getShellName([&]()
+        {
+            std::vector<char> outVec = readAllFromHandle(outputPipe.rh);
+            std::vector<char> errVec = readAllFromHandle(errorPipe.rh);
+            std::wstring outWide(outVec.size() / sizeof(wchar_t), L'\0');
+            memcpy(&outWide[0], outVec.data(), outWide.size() * sizeof(wchar_t));
+            std::string out { wcsToMbs(outWide, true) };
+            std::string err { errVec.begin(), errVec.end() };
+
+            std::string msg;
+            if (!outWide.empty()) {
+                if (outVec.size() >= shellNameLen)
+                {
+                    shellCurrent = "";
+                    for (size_t i = 0; i < shellNameLen; ++i)
+                    {
+                        shellCurrent.push_back(outVec[outVec.size()-shellNameLen+i]);
+                    }
+                    if (shellCurrent.find(shellXonsh) != std::string::npos)
+                    {
+                        pythonMode = true;
+                    }
+                }
+            }
+            if (!err.empty()) {
+                msg.append("Error while trying to read the default shell name\n");
+                msg.append("note: backend error output: ");
+                msg.append(err);
+            }
+
+            /* Exit with error if error message is not empty. */
+            if (!msg.empty())
+                termState.fatal("%s", msg.c_str());
+        });
+
+        /* wait for the thread to finish checking the shell's name */
+        if(getShellName.joinable())
+            getShellName.join();
+
+        /* cleanup */
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+
     /* Prepare the backend command line. */
     std::wstring wslCmdLine;
     if (pythonMode)
