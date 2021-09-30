@@ -690,7 +690,7 @@ int main(int argc, char *argv[])
     ret = pthread_create(&tidInput, nullptr, send_buffer, nullptr);
     assert(ret == 0);
 
-    /* Create thread to send input buffer to input socket */
+    /* Create thread to send output buffer to output socket */
     pthread_t tidOutput;
     ret = pthread_create(&tidOutput, nullptr, receive_buffer, nullptr);
     assert(ret == 0);
