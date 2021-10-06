@@ -38,37 +38,101 @@ typedef struct _LXSS_STD_HANDLES
     LXSS_STD_HANDLE StdErr;
 } LXSS_STD_HANDLES, *PLXSS_STD_HANDLES;
 
-/* Forward declaration of interface structure */
-typedef struct _ILxssUserSession ILxssUserSession;
+//
+// Build 17763 RS5
+//
+typedef struct ILxssUserSessionOne ILxssUserSessionOne;
 
-typedef HRESULT
-(STDMETHODCALLTYPE *GET_DISTRO_CONFIG_ONE)(
-        /*_In_*/ ILxssUserSession *wslSession,
-        /*_In_opt_*/ GUID *DistroId,
-        /*_Out_*/ PWSTR *DistributionName,
-        /*_Out_*/ PULONG Version,
-        /*_Out_*/ PWSTR *BasePath,
-        /*_Out_*/ PSTR *KernelCommandLine,
-        /*_Out_*/ PULONG DefaultUid,
-        /*_Out_*/ PULONG EnvironmentCount,
-        /*_Out_*/ PSTR **DefaultEnvironment,
-        /*_Out_*/ PULONG Flags);
+typedef struct ILxssUserSessionVtblOne {
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)(ILxssUserSessionOne *This, GUID *riid, PVOID *ppv);
+    ULONG(STDMETHODCALLTYPE *AddRef)(ILxssUserSessionOne *This);
+    ULONG(STDMETHODCALLTYPE *Release)(ILxssUserSessionOne *This);
 
-/* Build 21313: Removed BasePath and KernelCommandLine. */
-typedef HRESULT
-(STDMETHODCALLTYPE *GET_DISTRO_CONFIG_TWO)(
-        /*_In_*/ ILxssUserSession *wslSession,
-        /*_In_opt_*/ GUID *DistroId,
-        /*_Out_*/ PWSTR *DistributionName,
-        /*_Out_*/ PULONG Version,
-        /*_Out_*/ PULONG DefaultUid,
-        /*_Out_*/ PULONG EnvironmentCount,
-        /*_Out_*/ PSTR **DefaultEnvironment,
-        /*_Out_*/ PULONG Flags);
+    PVOID CreateInstance;
+    PVOID RegisterDistribution;
 
-typedef HRESULT
-(STDMETHODCALLTYPE *CREATE_LX_PROCESS_ONE)(
-    /*_In_*/ ILxssUserSession *This,
+    HRESULT(STDMETHODCALLTYPE *GetDistributionId)(
+        ILxssUserSessionOne *This,
+        PCWSTR DistroName,
+        ULONG EnableEnumerate,
+        GUID *DistroId);
+
+    PVOID TerminateDistribution;
+    PVOID UnregisterDistribution;
+    PVOID ConfigureDistribution;
+
+    HRESULT (STDMETHODCALLTYPE *GetDistributionConfiguration)(
+        ILxssUserSessionOne *This,
+        GUID *DistroId,
+        PWSTR *DistributionName,
+        PULONG Version,
+        PWSTR *BasePath,
+        PSTR *KernelCommandLine,
+        PULONG DefaultUid,
+        PULONG EnvironmentCount,
+        PSTR **DefaultEnvironment,
+        PULONG Flags);
+
+    HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
+        ILxssUserSessionOne *This,
+        GUID *DistroId);
+
+    PVOID SetDefaultDistribution;
+    PVOID EnumerateDistributions;
+    PVOID CreateLxProcess;
+    PVOID BeginUpgradeDistribution;
+    PVOID FinishUpgradeDistribution;
+} ILxssUserSessionVtblOne;
+
+struct ILxssUserSessionOne {
+    const ILxssUserSessionVtblOne *lpVtbl;
+};
+
+//
+// Build 19041 20H1
+//
+typedef struct ILxssUserSessionTwo ILxssUserSessionTwo;
+
+typedef struct ILxssUserSessionVtblTwo {
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)(ILxssUserSessionTwo *This, GUID *riid, PVOID *ppv);
+    ULONG(STDMETHODCALLTYPE *AddRef)(ILxssUserSessionTwo *This);
+    ULONG(STDMETHODCALLTYPE *Release)(ILxssUserSessionTwo *This);
+
+    PVOID CreateInstance;
+    PVOID RegisterDistribution;
+    PVOID RegisterDistributionPipe;
+
+    HRESULT(STDMETHODCALLTYPE *GetDistributionId)(
+        ILxssUserSessionTwo *This,
+        PCWSTR DistroName,
+        ULONG EnableEnumerate,
+        GUID *DistroId);
+
+    PVOID TerminateDistribution;
+    PVOID UnregisterDistribution;
+    PVOID ConfigureDistribution;
+
+    HRESULT (STDMETHODCALLTYPE *GetDistributionConfiguration)(
+        ILxssUserSessionTwo *This,
+        GUID *DistroId,
+        PWSTR *DistributionName,
+        PULONG Version,
+        PWSTR *BasePath,
+        PSTR *KernelCommandLine,
+        PULONG DefaultUid,
+        PULONG EnvironmentCount,
+        PSTR **DefaultEnvironment,
+        PULONG Flags);
+
+    HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
+        ILxssUserSessionTwo *This,
+        GUID *DistroId);
+
+    PVOID SetDefaultDistribution;
+    PVOID EnumerateDistributions;
+
+    HRESULT (STDMETHODCALLTYPE *CreateLxProcess)(
+    /*_In_*/ ILxssUserSessionTwo *This,
     /*_In_opt_*/ GUID *DistroId,
     /*_In_opt_*/ PCSTR CommandLine,
     /*_In_opt_*/ ULONG ArgumentCount,
@@ -89,12 +153,64 @@ typedef HRESULT
     /*_Out_*/ SOCKET *InputSocket,
     /*_Out_*/ SOCKET *OutputSocket,
     /*_Out_*/ SOCKET *ErrorSocket,
-    /*_Out_*/ SOCKET *ControlSocket);
+    /*_Out_*/ SOCKET *ServerSocket);
 
-/* Build 20211 : ULONG InstanceFlags is added. */
-typedef HRESULT
-(STDMETHODCALLTYPE *CREATE_LX_PROCESS_TWO)(
-    /*_In_*/ ILxssUserSession *This,
+    PVOID SetVersion;
+    PVOID RegisterLxBusServer;
+    PVOID ExportDistribution;
+    PVOID ExportDistributionPipe;
+    PVOID Shutdown;
+} ILxssUserSessionVtblTwo;
+
+struct ILxssUserSessionTwo {
+    const ILxssUserSessionVtblTwo *lpVtbl;
+};
+
+//
+// Build 22000 21H2
+//
+typedef struct ILxssUserSessionThree ILxssUserSessionThree;
+
+typedef struct ILxssUserSessionVtblThree {
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)(ILxssUserSessionThree *This, GUID *riid, PVOID *ppv);
+    ULONG(STDMETHODCALLTYPE *AddRef)(ILxssUserSessionThree *This);
+    ULONG(STDMETHODCALLTYPE *Release)(ILxssUserSessionThree *This);
+
+    PVOID CreateInstance;
+    PVOID RegisterDistribution;
+    PVOID RegisterDistributionPipe;
+
+    HRESULT(STDMETHODCALLTYPE *GetDistributionId)(
+        ILxssUserSessionThree *This,
+        PCWSTR DistroName,
+        ULONG EnableEnumerate,
+        GUID *DistroId);
+
+    PVOID TerminateDistribution;
+    PVOID UnregisterDistribution;
+    PVOID ConfigureDistribution;
+
+    // Build 21313 Co: Removed BasePath and KernelCommandLine.
+    HRESULT (STDMETHODCALLTYPE *GetDistributionConfiguration)(
+        ILxssUserSessionThree *wslSession,
+        GUID *DistroId,
+        PWSTR *DistributionName,
+        PULONG Version,
+        PULONG DefaultUid,
+        PULONG EnvironmentCount,
+        PSTR **DefaultEnvironment,
+        PULONG Flags);
+
+    HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
+        ILxssUserSessionThree *This,
+        GUID *DistroId);
+
+    PVOID SetDefaultDistribution;
+    PVOID EnumerateDistributions;
+
+    // Build 20211 Fe: ULONG InstanceFlags is added.
+    HRESULT (STDMETHODCALLTYPE *CreateLxProcess)(
+    /*_In_*/ ILxssUserSessionThree *This,
     /*_In_opt_*/ GUID *DistroId,
     /*_In_opt_*/ PCSTR CommandLine,
     /*_In_opt_*/ ULONG ArgumentCount,
@@ -116,79 +232,21 @@ typedef HRESULT
     /*_Out_*/ SOCKET *InputSocket,
     /*_Out_*/ SOCKET *OutputSocket,
     /*_Out_*/ SOCKET *ErrorSocket,
-    /*_Out_*/ SOCKET *ControlSocket);
+    /*_Out_*/ SOCKET *ServerSocket);
 
-/* Unused COM methods are ignored as void pointers */
-struct _ILxssUserSessionVtbl
-{
-    /* IUnknown methods */
-    HRESULT(STDMETHODCALLTYPE *QueryInterface)(
-        ILxssUserSession *This,
-        GUID *riid,
-        PVOID *ppv);
+    PVOID SetVersion;
+    PVOID RegisterLxBusServer;
+    PVOID ExportDistribution;
+    PVOID ExportDistributionPipe;
+    PVOID AttachPassThroughDisk;
+    PVOID DetachPassThroughDisk;
+    PVOID MountDisk;
+    PVOID Shutdown;
+    PVOID CreateVm;
+} ILxssUserSessionVtblThree;
 
-    ULONG(STDMETHODCALLTYPE *AddRef)(
-        ILxssUserSession *This);
-
-    ULONG(STDMETHODCALLTYPE *Release)(
-        ILxssUserSession *This);
-
-    /* ILxssUserSession methods */
-    void *CreateInstance;
-    void *RegisterDistribution;
-    void *RegisterDistributionPipe;
-
-    HRESULT(STDMETHODCALLTYPE *GetDistributionId)(
-        ILxssUserSession *This,
-        PCWSTR DistroName,
-        ULONG EnableEnumerate,
-        GUID *DistroId);
-
-    void *TerminateDistribution;
-    void *UnregisterDistribution;
-    void *ConfigureDistribution;
-
-    /* WARNING: Black magic here. */
-    union
-    {
-        /* Before Build 21313 Co */
-        GET_DISTRO_CONFIG_ONE GetDistributionConfiguration_One;
-
-        /* After Build 21313 Co */
-        GET_DISTRO_CONFIG_TWO GetDistributionConfiguration_Two;
-    };
-
-    HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
-        ILxssUserSession *This,
-        GUID *DistroId);
-
-    void *SetDefaultDistribution;
-    void *EnumerateDistributions;
-
-    /* WARNING: Black magic here. */
-    union
-    {
-        /* Before Build 20211 Fe */
-        CREATE_LX_PROCESS_ONE CreateLxProcess_One;
-
-        /* After Build 20211 Fe */
-        CREATE_LX_PROCESS_TWO CreateLxProcess_Two;
-    };
-
-    void *SetVersion;
-    void *RegisterLxBusServer;
-    void *ExportDistribution;
-    void *ExportDistributionPipe;
-    void *AttachPassThroughDisk;
-    void *DetachPassThroughDisk;
-    void *MountDisk;
-    void *Shutdown;
-    void *CreateVm;
-};
-
-struct _ILxssUserSession
-{
-    struct _ILxssUserSessionVtbl *lpVtbl;
+struct ILxssUserSessionThree {
+    const ILxssUserSessionVtblThree *lpVtbl;
 };
 
 #endif /* LXSSUSERSESSION_H */

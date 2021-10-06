@@ -31,7 +31,18 @@
 
 #endif /* WSL_DISTRIBUTION_FLAGS_VALID */
 
-static ILxssUserSession *wslSession = NULL;
+static volatile union {
+    ILxssUserSessionOne *wslSessionOne;
+    ILxssUserSessionTwo *wslSessionTwo;
+    ILxssUserSessionThree *wslSessionThree;
+} ComObj = { NULL };
+
+static void LxssErrCode(HRESULT hRes)
+{
+    // Custom error code from LxssManager COM interface.
+    if (hRes == (HRESULT)0x80040302)
+        fatal("There is no distribution with the supplied name.\n");
+}
 
 void ComInit(void)
 {
@@ -50,7 +61,7 @@ void ComInit(void)
                             NULL,
                             CLSCTX_LOCAL_SERVER,
                             IID_ILxssUserSession,
-                            (PVOID *)&wslSession);
+                            (PVOID *)&ComObj);
     assert(hRes == 0);
 }
 
@@ -61,28 +72,21 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
     PSTR KernelCommandLine, *DefaultEnvironment;
     ULONG Version, DefaultUid, EnvironmentCount, Flags;
 
-    if (DistroName.empty())
-    {
-        hRes = wslSession->lpVtbl->GetDefaultDistribution(
-            wslSession, DistroId);
-    }
-    else
-    {
-        hRes = wslSession->lpVtbl->GetDistributionId(
-            wslSession, DistroName.c_str(), 0, DistroId);
-    }
+    const int WindowsBuild = GetWindowsBuild();
 
-    // Custom error code from LxssManager COM interface.
-    if (hRes == (HRESULT)0x80040302)
-        fatal("There is no distribution with the supplied name.\n");
-
-    assert(hRes == 0);
-
-    /* Before Build 21313 Co */
-    if (GetWindowsBuild() < 21313)
+    if (WindowsBuild == 17763)
     {
-        hRes = wslSession->lpVtbl->GetDistributionConfiguration_One(
-            wslSession,
+        if (DistroName.empty())
+            hRes = ComObj.wslSessionOne->lpVtbl->GetDefaultDistribution(
+                ComObj.wslSessionOne, DistroId);
+        else
+            hRes = ComObj.wslSessionOne->lpVtbl->GetDistributionId(
+                ComObj.wslSessionOne, DistroName.c_str(), 0, DistroId);
+
+        LxssErrCode(hRes);
+
+        hRes = ComObj.wslSessionOne->lpVtbl->GetDistributionConfiguration(
+            ComObj.wslSessionOne,
             DistroId,
             &DistributionName,
             &Version,
@@ -93,14 +97,52 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
             &DefaultEnvironment,
             &Flags);
 
+        assert(hRes == 0);
+
         CoTaskMemFree(BasePath);
         CoTaskMemFree(KernelCommandLine);
     }
-    else
+    else if (WindowsBuild < 21313) // Before Build 21313 Cobalt
     {
-        /* After Build 21313 Co */
-        hRes = wslSession->lpVtbl->GetDistributionConfiguration_Two(
-            wslSession,
+        if (DistroName.empty())
+            hRes = ComObj.wslSessionTwo->lpVtbl->GetDefaultDistribution(
+                ComObj.wslSessionTwo, DistroId);
+        else
+            hRes = ComObj.wslSessionTwo->lpVtbl->GetDistributionId(
+                ComObj.wslSessionTwo, DistroName.c_str(), 0, DistroId);
+
+        LxssErrCode(hRes);
+
+        hRes = ComObj.wslSessionTwo->lpVtbl->GetDistributionConfiguration(
+            ComObj.wslSessionTwo,
+            DistroId,
+            &DistributionName,
+            &Version,
+            &BasePath,
+            &KernelCommandLine,
+            &DefaultUid,
+            &EnvironmentCount,
+            &DefaultEnvironment,
+            &Flags);
+
+        assert(hRes == 0);
+
+        CoTaskMemFree(BasePath);
+        CoTaskMemFree(KernelCommandLine);
+    }
+    else // After Build 21313 Cobalt
+    {
+        if (DistroName.empty())
+            hRes = ComObj.wslSessionThree->lpVtbl->GetDefaultDistribution(
+                ComObj.wslSessionThree, DistroId);
+        else
+            hRes = ComObj.wslSessionThree->lpVtbl->GetDistributionId(
+                ComObj.wslSessionThree, DistroName.c_str(), 0, DistroId);
+
+        LxssErrCode(hRes);
+
+        hRes = ComObj.wslSessionThree->lpVtbl->GetDistributionConfiguration(
+            ComObj.wslSessionThree,
             DistroId,
             &DistributionName,
             &Version,
@@ -108,9 +150,9 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
             &EnvironmentCount,
             &DefaultEnvironment,
             &Flags);
-    }
 
-    assert(hRes == 0);
+        assert(hRes == 0);
+    }
 
     CoTaskMemFree(DistributionName);
 
@@ -138,11 +180,13 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
                                  ProcessParameters->
                                  Reserved2[0];
 
+    const int WindowsBuild = GetWindowsBuild();
+
     /* Before Build 20211 Fe */
-    if (GetWindowsBuild() < 20211)
+    if (WindowsBuild < 20211)
     {
-        hRes = wslSession->lpVtbl->CreateLxProcess_One(
-            wslSession,
+        hRes = ComObj.wslSessionTwo->lpVtbl->CreateLxProcess(
+            ComObj.wslSessionTwo,
             DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
             nullptr, 0, nullptr, 0, 0,
@@ -160,8 +204,8 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
     else
     {
         /* After Build 20211 Fe */
-        hRes = wslSession->lpVtbl->CreateLxProcess_Two(
-            wslSession,
+        hRes = ComObj.wslSessionThree->lpVtbl->CreateLxProcess(
+            ComObj.wslSessionThree,
             DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
             nullptr, 0, nullptr, 0, 0,
@@ -187,8 +231,8 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
     if (LxProcessHandle) CloseHandle(LxProcessHandle);
     if (ServerHandle) CloseHandle(ServerHandle);
 
-    if (wslSession)
-        wslSession->lpVtbl->Release(wslSession);
+    if (ComObj.wslSessionOne)
+        ComObj.wslSessionOne->lpVtbl->Release(ComObj.wslSessionOne);
     CoUninitialize();
     return hRes;
 }
