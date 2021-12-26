@@ -57,11 +57,22 @@ void ComInit(void)
                                 EOAC_STATIC_CLOAKING, NULL);
     assert(hRes == 0);
 
-    hRes = CoCreateInstance(CLSID_LxssUserSession,
+    // First try with COM server in lifted WSL service
+    hRes = CoCreateInstance(CLSID_WslService,
                             NULL,
                             CLSCTX_LOCAL_SERVER,
-                            IID_ILxssUserSession,
+                            IID_IWSLService,
                             (PVOID *)&ComObj);
+
+    // Now try with COM server in system WSL service
+    if (FAILED(hRes))
+    {
+        hRes = CoCreateInstance(CLSID_LxssUserSession,
+                                NULL,
+                                CLSCTX_LOCAL_SERVER,
+                                IID_ILxssUserSession,
+                                (PVOID *)&ComObj);
+    }
     assert(hRes == 0);
 }
 

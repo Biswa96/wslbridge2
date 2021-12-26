@@ -11,14 +11,26 @@
 #ifndef LXSSUSERSESSION_H
 #define LXSSUSERSESSION_H
 
-/* Class identifier */
+// COM IDs for lifted WSL service
+static const GUID CLSID_WslService = {
+    0xF122531F,
+    0x326B,
+    0x4514,
+    { 0x85, 0xAE, 0xDC, 0x99, 0xD3, 0x1D, 0x82, 0x56 } };
+
+static const GUID IID_IWSLService = {
+    0x50047071,
+    0x122C,
+    0x4CAD,
+    { 0x9C, 0x93, 0x94, 0x72, 0x0E, 0xB7, 0x7B, 0x06 } };
+
+// COM IDs for system WSL service
 static const GUID CLSID_LxssUserSession = {
     0x4F476546,
     0xB412,
     0x4579,
     { 0xB6, 0x4C, 0x12, 0x3D, 0xF3, 0x31, 0xE3, 0xD6 } };
 
-/* Interface identifier */
 static const GUID IID_ILxssUserSession = {
     0x536A6BCF,
     0xFE04,
