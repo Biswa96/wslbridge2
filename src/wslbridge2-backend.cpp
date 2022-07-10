@@ -17,6 +17,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <wordexp.h>
+#include <limits.h> // PIPE_BUF
 
 #include <string>
 #include <vector>
@@ -196,6 +197,7 @@ int main(int argc, char *argv[])
 
         ssize_t readRet = 0, writeRet = 0;
         char data[1024]; /* Buffer to hold raw data from pty */
+        assert(sizeof data <= PIPE_BUF);
 
         do
         {
@@ -206,8 +208,85 @@ int main(int argc, char *argv[])
             if (fds[0].revents & POLLIN)
             {
                 readRet = recv(ioSockets.inputSock, data, sizeof data, 0);
-                if (readRet > 0)
-                    writeRet = write(mfd_dp, data, readRet);
+                char * s = data;
+                int len = readRet;
+                writeRet = 1;
+                while (writeRet > 0 && len > 0)
+                {
+                    if (!*s)
+                    {
+                        // dispatch NUL escaped inband information
+                        s++;
+                        len--;
+
+                        if (len < 9 && s + 9 >= data + sizeof data)
+                        {
+                            // make room for additional loading
+                            memcpy(data, s, len);
+                            s = data;
+                        }
+
+                        // ensure 1 more byte is loaded to dispatch on
+                        if (!len)
+                        {
+                            readRet = recv(ioSockets.inputSock, s, 1, 0);
+                            if (readRet > 0)
+                            {
+                                len += readRet;
+                            }
+                            else
+                            {
+                                writeRet = -1;
+                                break;
+                            }
+                        }
+                        if (*s == 2)
+                        {
+                            // STX: escaped NUL
+                            s++;
+                            len--;
+                            writeRet = write(mfd_dp, "", 1);
+                        }
+                        else if (*s == 16)
+                        {
+                            // DLE: terminal window size change
+                            s++;
+                            len--;
+                            // ensure 8 more bytes are loaded for winsize
+                            while (readRet > 0 && len < 8)
+                            {
+                                readRet = recv(ioSockets.inputSock, s + len, 8 - len, 0);
+                                if (readRet > 0)
+                                {
+                                    len += readRet;
+                                }
+                            }
+                            if (readRet <= 0)
+                            {
+                                writeRet = -1;
+                                break;
+                            }
+                            struct winsize * winsp = (struct winsize *)s;
+                            s += 8;
+                            len -= 8;
+                            winsp->ws_xpixel = 0;
+                            winsp->ws_ypixel = 0;
+                            ret = ioctl(mfd, TIOCSWINSZ, winsp);
+                            if (ret != 0)
+                                perror("ioctl(TIOCSWINSZ)");
+                        }
+                    }
+                    else
+                    {
+                        int n = strnlen(s, len);
+                        writeRet = write(mfd_dp, s, n);
+                        if (writeRet > 0)
+                        {
+                            s += writeRet;
+                            len -= writeRet;
+                        }
+                    }
+                }
             }
 
             /* Resize window when buffer received in control socket */

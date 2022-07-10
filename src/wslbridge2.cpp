@@ -43,19 +43,41 @@ union IoSockets
 /* global variable */
 static volatile union IoSockets g_ioSockets = { 0 };
 
+#define dont_debug_inband
+#define dont_use_controlsocket
+
 static void resize_window(int signum)
 {
+#ifdef use_controlsocket
+#warning this may crash for unknown reason, maybe terminate the backend
     struct winsize winp;
+    ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
 
     /* Send terminal window size to control socket */
-    ioctl(STDIN_FILENO, TIOCGWINSZ, &winp);
     send(g_ioSockets.controlSock, (char *)&winp, sizeof winp, 0);
+#else
+    static char wins[2 + sizeof(struct winsize)] = {0, 16};
+    static struct winsize * winsp = (struct winsize *)&wins[2];
+    ioctl(STDIN_FILENO, TIOCGWINSZ, winsp);
+
+#ifdef debug_inband
+    /* Send terminal window size inband, visualized as ESC sequence */
+    char resizesc[55];
+    //sprintf(resizesc, "\e_8;%u;%u\a", winsp->ws_row, winsp->ws_col);
+    sprintf(resizesc, "^[_8;%u;%u^G", winsp->ws_row, winsp->ws_col);
+    send(g_ioSockets.inputSock, resizesc, strlen(resizesc), 0);
+#else
+    /* Send terminal window size inband, with NUL escape */
+    send(g_ioSockets.inputSock, wins, sizeof wins, 0);
+#endif
+#endif
 }
 
 static void* send_buffer(void *param)
 {
     int ret;
     char data[1024];
+    assert(sizeof data <= PIPE_BUF);
 
     while (1)
     {
@@ -65,8 +87,33 @@ static void* send_buffer(void *param)
             closesocket(g_ioSockets.inputSock);
             break;
         }
-        if (!send(g_ioSockets.inputSock, data, ret, 0))
-            break;
+            char * s = data;
+            int len = ret;
+            while (ret > 0 && len > 0)
+            {
+                if (!*s)
+                {
+                    // send NUL STX
+#ifdef debug_inband
+                    ret = send(g_ioSockets.inputSock, (void*)"nul", 3, 0);
+#else
+                    static char NUL_STX[] = {0, 2};
+                    ret = send(g_ioSockets.inputSock, NUL_STX, 2, 0);
+#endif
+                    s++;
+                    len--;
+                }
+                else
+                {
+                    int n = strnlen(s, len);
+                    ret = send(g_ioSockets.inputSock, s, n, 0);
+                    if (ret > 0)
+                    {
+                        s += ret;
+                        len -= ret;
+                    }
+                }
+            }
     }
 
     pthread_exit(&ret);
@@ -480,16 +527,6 @@ int main(int argc, char *argv[])
         g_ioSockets.controlSock = win_local_accept(controlSock);
     }
 
-    /* Capture window resize signal and send buffer to control socket */
-    {
-    struct sigaction act;
-    memset(&act, 0, sizeof act);
-    act.sa_handler = resize_window;
-    act.sa_flags = SA_RESTART;
-    ret = sigaction(SIGWINCH, &act, NULL);
-    assert(ret == 0);
-    }
-
     /* Create thread to send input buffer to input socket */
     pthread_t tidInput;
     ret = pthread_create(&tidInput, nullptr, send_buffer, nullptr);
@@ -501,6 +538,17 @@ int main(int argc, char *argv[])
     assert(ret == 0);
 
     termState.enterRawMode();
+
+    /* Create thread to send window size through control socket */
+    struct sigaction act = {};
+    act.sa_handler = resize_window;
+    act.sa_flags = SA_RESTART;
+    ret = sigaction(SIGWINCH, &act, NULL);
+    assert(ret == 0);
+
+    /* Notify initial size in case it's changed since starting */
+    //resize_window(0);
+    kill(getpid(), SIGWINCH);
 
     /*
      * wsltty#254: WORKAROUND: Terminates input thread forcefully
