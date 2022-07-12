@@ -1,43 +1,42 @@
+# SPDX-License-Identifer: GPL-3.0-or-later
 # This file is part of wslbridge2 project
-# Licensed under the GNU General Public License version 3
 # Copyright (C) Biswapriyo Nath
-
 
 # Build image
 image:
-- Ubuntu
-- Visual Studio 2019
+- Ubuntu2004
+- Visual Studio 2022
 
 # Version format
-version: "0.{build}"
+version: "#{build}"
 
-# Start builds on tags only
-skip_non_tags: true
+# Do not increment build number after pull requests
+pull_requests:
+  do_not_increment_build_number: true
 
-# Only build the master branch
-branches:
-  only:
-    - master
+# Do not start a new build when a new Git tag is created
+skip_tags: true
 
 # Only build for X86_64 architecture
 platform: x64
 
 environment:
-  backendJob: 'image: Ubuntu'
+  backendJob: 'image: Ubuntu2004'
 
 before_build:
 - sh: |
-    make -s RELEASE=1
+    docker build . -t wslbridge2
+    docker run --rm wslbridge2 tar -cf - -C /build/bin wslbridge2-backend | tar -xvf -
 
 - cmd: |
-    set PATH=C:\cygwin64;C:\cygwin64\bin;C:\cygwin64\usr\bin;%PATH%
-    make -s RELEASE=1
+    set PATH=C:\cygwin64\bin;%PATH%
+    make RELEASE=1
 
 build_script:
 - ps: |
     if ($env:APPVEYOR_JOB_NAME -eq $env:backendJob)
     {
-        Get-ChildItem .\bin\wslbridge2-backend | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
+        Get-ChildItem .\wslbridge2-backend | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
     }
 
     if ($env:APPVEYOR_JOB_NAME -ne $env:backendJob)
