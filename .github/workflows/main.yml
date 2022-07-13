@@ -1,0 +1,46 @@
+name: main
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Build
+        run: |
+          docker build . -t wslbridge2
+          docker run --rm wslbridge2 tar -cf - -C /build/bin wslbridge2-backend | tar -xvf -
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: wslbridge2-backend
+          path: wslbridge2-backend
+
+  frontend:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Update
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: true
+          install: gcc make
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          make RELEASE=1
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: wslbridge2.exe
+          path: bin/wslbridge2.exe
