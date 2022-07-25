@@ -335,17 +335,18 @@ int main(int argc, char *argv[])
     win_sock_init();
 
     /* Initialize COM. */
-    ComInit();
+    bool IsLiftedWSL;
+    ComInit(&IsLiftedWSL);
 
     GUID DistroId, VmId;
     SOCKET inputSock = 0, outputSock = 0, controlSock = 0;
 
     /* Detect WSL version. Assume distroName is initialized empty. */
-    const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName));
+    const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName), IsLiftedWSL);
 
     if (wslTwo) /* WSL2: Use Hyper-V sockets. */
     {
-        const HRESULT hRes = GetVmId(&DistroId, &VmId);
+        const HRESULT hRes = GetVmId(&DistroId, &VmId, IsLiftedWSL);
         if (hRes != 0)
             fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
 

@@ -261,4 +261,92 @@ struct ILxssUserSessionThree {
     const ILxssUserSessionVtblThree *lpVtbl;
 };
 
+// For lifted WSL service only
+typedef struct _EXECUTION_CONTEXT
+{
+    char data[144];
+} EXECUTION_CONTEXT, *PEXECUTION_CONTEXT;
+
+typedef struct IWSLService IWSLService;
+
+typedef struct IWSLServiceVtbl {
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)(IWSLService *This, GUID *riid, PVOID *ppv);
+    ULONG(STDMETHODCALLTYPE *AddRef)(IWSLService *This);
+    ULONG(STDMETHODCALLTYPE *Release)(IWSLService *This);
+
+    PVOID CreateInstance;
+    PVOID RegisterDistribution;
+    PVOID RegisterDistributionPipe;
+
+    HRESULT(STDMETHODCALLTYPE *GetDistributionId)(
+        IWSLService *This,
+        PCWSTR DistroName,
+        ULONG EnableEnumerate,
+        PEXECUTION_CONTEXT ExecutionContext,
+        GUID *DistroId);
+
+    PVOID TerminateDistribution;
+    PVOID UnregisterDistribution;
+    PVOID ConfigureDistribution;
+
+    HRESULT (STDMETHODCALLTYPE *GetDistributionConfiguration)(
+        IWSLService *wslSession,
+        GUID *DistroId,
+        PWSTR *DistributionName,
+        PULONG Version,
+        PULONG DefaultUid,
+        PULONG EnvironmentCount,
+        PSTR **DefaultEnvironment,
+        PULONG Flags,
+        PEXECUTION_CONTEXT ExecutionContext);
+
+    HRESULT(STDMETHODCALLTYPE *GetDefaultDistribution)(
+        IWSLService *This,
+        PEXECUTION_CONTEXT ExecutionContext,
+        GUID *DistroId);
+
+    PVOID SetDefaultDistribution;
+    PVOID EnumerateDistributions;
+
+    HRESULT (STDMETHODCALLTYPE *CreateLxProcess)(
+    /*_In_*/ IWSLService *This,
+    /*_In_opt_*/ GUID *DistroId,
+    /*_In_opt_*/ PCSTR CommandLine,
+    /*_In_opt_*/ ULONG ArgumentCount,
+    /*_In_opt_*/ PCSTR *Arguments,
+    /*_In_opt_*/ PCWSTR CurrentDirectory,
+    /*_In_opt_*/ PCWSTR SharedEnvironment,
+    /*_In_opt_*/ PCWSTR ProcessEnvironment,
+    /*_In_opt_*/ SIZE_T EnvironmentLength,
+    /*_In_opt_*/ PCWSTR LinuxUserName,
+    /*_In_opt_*/ USHORT WindowWidthX,
+    /*_In_opt_*/ USHORT WindowHeightY,
+    /*_In_*/ ULONG ConsoleHandle,
+    /*_In_*/ PLXSS_STD_HANDLES StdHandles,
+    /*_In_*/ ULONG InstanceFlags,
+    /*_Out_*/ GUID *InitiatedDistroId,
+    /*_Out_*/ GUID *LxInstanceId,
+    /*_Out_*/ PHANDLE LxProcessHandle,
+    /*_Out_*/ PHANDLE ServerHandle,
+    /*_Out_*/ SOCKET *InputSocket,
+    /*_Out_*/ SOCKET *OutputSocket,
+    /*_Out_*/ SOCKET *ErrorSocket,
+    /*_Out_*/ SOCKET *ServerSocket,
+    /*_In_*/ PEXECUTION_CONTEXT ExecutionContext);
+
+    PVOID SetVersion;
+    PVOID RegisterLxBusServer;
+    PVOID ExportDistribution;
+    PVOID ExportDistributionPipe;
+    PVOID AttachPassThroughDisk;
+    PVOID DetachPassThroughDisk;
+    PVOID MountDisk;
+    PVOID Shutdown;
+    PVOID CreateVm;
+} IWSLServiceVtbl;
+
+struct IWSLService {
+    const IWSLServiceVtbl *lpVtbl;
+};
+
 #endif /* LXSSUSERSESSION_H */

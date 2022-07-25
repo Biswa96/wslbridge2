@@ -35,6 +35,7 @@ static volatile union {
     ILxssUserSessionOne *wslSessionOne;
     ILxssUserSessionTwo *wslSessionTwo;
     ILxssUserSessionThree *wslSessionThree;
+    IWSLService *wslService;
 } ComObj = { NULL };
 
 static void LxssErrCode(HRESULT hRes)
@@ -44,7 +45,7 @@ static void LxssErrCode(HRESULT hRes)
         fatal("There is no distribution with the supplied name.\n");
 }
 
-void ComInit(void)
+void ComInit(bool *IsLiftedWSL)
 {
     HRESULT hRes;
 
@@ -57,7 +58,7 @@ void ComInit(void)
                                 EOAC_STATIC_CLOAKING, NULL);
     assert(hRes == 0);
 
-    // First try with COM server in lifted WSL service
+    // wsltty#302: First try with COM server in lifted WSL service
     hRes = CoCreateInstance(CLSID_WslService,
                             NULL,
                             CLSCTX_LOCAL_SERVER,
@@ -72,20 +73,50 @@ void ComInit(void)
                                 CLSCTX_LOCAL_SERVER,
                                 IID_ILxssUserSession,
                                 (PVOID *)&ComObj);
+        assert(hRes == 0);
+
+        *IsLiftedWSL = false;
     }
-    assert(hRes == 0);
+    else
+        *IsLiftedWSL = true;
 }
 
-bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
+bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLiftedWSL)
 {
     HRESULT hRes;
     PWSTR DistributionName, BasePath;
     PSTR KernelCommandLine, *DefaultEnvironment;
     ULONG Version, DefaultUid, EnvironmentCount, Flags;
+    EXECUTION_CONTEXT ExecutionContext;
+    memset(&ExecutionContext, 0, sizeof ExecutionContext);
 
     const int WindowsBuild = GetWindowsBuild();
 
-    if (WindowsBuild == 17763)
+    if (IsLiftedWSL)
+    {
+        if (DistroName.empty())
+            hRes = ComObj.wslService->lpVtbl->GetDefaultDistribution(
+                ComObj.wslService, &ExecutionContext, DistroId);
+        else
+            hRes = ComObj.wslService->lpVtbl->GetDistributionId(
+                ComObj.wslService, DistroName.c_str(), 0, &ExecutionContext, DistroId);
+
+        LxssErrCode(hRes);
+
+        hRes = ComObj.wslService->lpVtbl->GetDistributionConfiguration(
+            ComObj.wslService,
+            DistroId,
+            &DistributionName,
+            &Version,
+            &DefaultUid,
+            &EnvironmentCount,
+            &DefaultEnvironment,
+            &Flags,
+            &ExecutionContext);
+
+        assert(hRes == 0);
+    }
+    else if (WindowsBuild == 17763)
     {
         if (DistroName.empty())
             hRes = ComObj.wslSessionOne->lpVtbl->GetDefaultDistribution(
@@ -173,12 +204,14 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName)
         return false;
 }
 
-HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
+HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL)
 {
     HRESULT hRes;
     GUID InitiatedDistroID;
     HANDLE LxProcessHandle, ServerHandle;
     SOCKET SockIn, SockOut, SockErr, ServerSocket;
+    EXECUTION_CONTEXT ExecutionContext;
+    memset(&ExecutionContext, 0, sizeof ExecutionContext);
 
     // Initialize StdHandles members to be console handles by default.
     // otherwise LxssManager will catch undefined values.
@@ -193,8 +226,27 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
 
     const int WindowsBuild = GetWindowsBuild();
 
-    /* Before Build 20211 Fe */
-    if (WindowsBuild < 20211)
+    if (IsLiftedWSL)
+    {
+        hRes = ComObj.wslService->lpVtbl->CreateLxProcess(
+            ComObj.wslService,
+            DistroId,
+            nullptr, 0, nullptr, nullptr, nullptr,
+            nullptr, 0, nullptr, 0, 0,
+            HandleToULong(ConsoleHandle),
+            &StdHandles,
+            0,
+            &InitiatedDistroID,
+            LxInstanceID,
+            &LxProcessHandle,
+            &ServerHandle,
+            &SockIn,
+            &SockOut,
+            &SockErr,
+            &ServerSocket,
+            &ExecutionContext);
+    }
+    else if (WindowsBuild < 20211) // Before Build 20211 Fe
     {
         hRes = ComObj.wslSessionTwo->lpVtbl->CreateLxProcess(
             ComObj.wslSessionTwo,
@@ -212,9 +264,8 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID)
             &SockErr,
             &ServerSocket);
     }
-    else
+    else // After Build 20211 Fe
     {
-        /* After Build 20211 Fe */
         hRes = ComObj.wslSessionThree->lpVtbl->CreateLxProcess(
             ComObj.wslSessionThree,
             DistroId,
