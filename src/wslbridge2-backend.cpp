@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2021 Biswapriyo Nath.
+ * Copyright (C) 2019-2022 Biswapriyo Nath.
  */
 
 #include <assert.h>
@@ -52,7 +52,7 @@ static void usage(const char *prog)
     printf("  -p, --path dir Starts in certain path.\n");
     printf("  -r, --rows N   Sets N rows for pty.\n");
     printf("  -s, --show     Shows hidden backend window and debug output.\n");
-    printf("  -x, --xmod     Enables X11 forwarding.\n\n");
+    printf("  -x, --xmod     Dummy mode just to start a WSL2 session.\n\n");
 
     exit(0);
 }
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
     int ret;
     struct winsize winp;
     struct ChildParams childParams;
-    volatile bool debugMode = false, loginMode = false, xservMode = false;
+    volatile bool debugMode = false, loginMode = false, xtraMode = false;
     unsigned int inputPort = 0, outputPort = 0, controlPort = 0;
 
     const char shortopts[] = "+0:1:3:c:e:hlp:r:sx";
@@ -126,10 +126,13 @@ int main(int argc, char *argv[])
             case 'p': childParams.cwd = optarg; break;
             case 'r': winp.ws_row = atoi(optarg); break;
             case 's': debugMode = true; break;
-            case 'x': xservMode = true; break;
+            case 'x': xtraMode = true; break;
             default: try_help(argv[0]); break;
         }
     }
+
+    if (xtraMode)
+        return 0;
 
     /* If size not provided use master window size */
     if (winp.ws_col == 0 || winp.ws_row == 0)
