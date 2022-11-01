@@ -16,6 +16,14 @@
 /* KUSER_SHARED_DATA.NtSystemRoot */
 #define GetWinDir() ((wchar_t *)(0x7FFE0000 + 0x0030))
 
+#define LOG_WIN32_ERROR(str) { \
+    fatal("ERROR: %s:%u: " str ": %s\n", __FUNCTION__, __LINE__, GetErrorMessage(GetLastError()).c_str()); \
+    }
+
+#define LOG_HRESULT_ERROR(str, hr) { \
+    fatal("ERROR: %s:%u: " str ": %s\n", __FUNCTION__, __LINE__, GetErrorMessage(hr & 0xFFFF).c_str()); \
+    }
+
 std::wstring mbsToWcs(const std::string &s);
 std::string wcsToMbs(const std::wstring &s, bool emptyOnError=false);
 std::wstring dirname(const std::wstring &path);

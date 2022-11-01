@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2021 Biswapriyo Nath.
+ * Copyright (C) 2019-2022 Biswapriyo Nath.
  */
 
 #include <winsock2.h>
@@ -189,6 +189,38 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
+static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine, const bool debugMode)
+{
+    std::wstring cmdLine;
+    cmdLine.append(L"\"");
+    cmdLine.append(wslPath);
+    cmdLine.append(L"\"");
+    cmdLine.append(L" /bin/sh -c");
+    appendWslArg(wslCmdLine, L"-x");
+    appendWslArg(cmdLine, wslCmdLine);
+
+    if (debugMode)
+        wprintf(L"Backend CommandLine: %ls\n", &cmdLine[0]);
+
+    PROCESS_INFORMATION pi = {};
+    STARTUPINFOW si = {};
+    si.cb = sizeof si;
+
+    if (CreateProcessW(wslPath.c_str(), &cmdLine[0],
+        NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) == FALSE)
+    {
+        LOG_WIN32_ERROR("CreateProcessW");
+    }
+
+    if (WaitForSingleObject(pi.hProcess, INFINITE))
+    {
+        LOG_WIN32_ERROR("WaitForSingleObject");
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 int main(int argc, char *argv[])
 {
     /* Minimum requirement Windows 10 build 17763 aka. version 1809 */
@@ -337,6 +369,10 @@ int main(int argc, char *argv[])
     /* Initialize COM. */
     bool IsLiftedWSL;
     ComInit(&IsLiftedWSL);
+
+    /* Start dummy process after ComInit, otherwise RPC_E_TOO_LATE */
+    if (IsLiftedWSL)
+        start_dummy(wslPath, wslCmdLine, debugMode);
 
     GUID DistroId, VmId;
     SOCKET inputSock = 0, outputSock = 0, controlSock = 0;
