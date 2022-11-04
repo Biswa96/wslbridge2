@@ -1,7 +1,7 @@
 /* 
  * This file is part of wslbridge2 project
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2021 Biswapriyo Nath
+ * Copyright (C) 2019-2022 Biswapriyo Nath
  */
 
 /*
@@ -10,7 +10,6 @@
 
 #include <winsock.h>
 #include <winternl.h> /* TEB, PEB, ConsoleHandle */
-#include <assert.h>
 #include <string>
 
 #include "common.hpp"
@@ -50,13 +49,19 @@ void ComInit(bool *IsLiftedWSL)
     HRESULT hRes;
 
     hRes = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    assert(hRes == 0);
+    if (hRes)
+    {
+        LOG_HRESULT_ERROR("CoInitializeEx", hRes);
+    }
 
     hRes = CoInitializeSecurity(NULL, -1, NULL, NULL,
                                 RPC_C_AUTHN_LEVEL_DEFAULT,
                                 SecurityDelegation, NULL,
                                 EOAC_STATIC_CLOAKING, NULL);
-    assert(hRes == 0);
+    if (hRes)
+    {
+        LOG_HRESULT_ERROR("CoInitializeSecurity", hRes);
+    }
 
     // wsltty#302: First try with COM server in lifted WSL service
     hRes = CoCreateInstance(CLSID_WslService,
@@ -73,7 +78,10 @@ void ComInit(bool *IsLiftedWSL)
                                 CLSCTX_LOCAL_SERVER,
                                 IID_ILxssUserSession,
                                 (PVOID *)&ComObj);
-        assert(hRes == 0);
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("CoCreateInstance", hRes);
+        }
 
         *IsLiftedWSL = false;
     }
@@ -114,7 +122,10 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
             &Flags,
             &ExecutionContext);
 
-        assert(hRes == 0);
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("GetDistributionConfiguration", hRes);
+        }
     }
     else if (WindowsBuild == 17763)
     {
@@ -139,7 +150,10 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
             &DefaultEnvironment,
             &Flags);
 
-        assert(hRes == 0);
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("GetDistributionConfiguration", hRes);
+        }
 
         CoTaskMemFree(BasePath);
         CoTaskMemFree(KernelCommandLine);
@@ -167,7 +181,10 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
             &DefaultEnvironment,
             &Flags);
 
-        assert(hRes == 0);
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("GetDistributionConfiguration", hRes);
+        }
 
         CoTaskMemFree(BasePath);
         CoTaskMemFree(KernelCommandLine);
@@ -193,7 +210,10 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
             &DefaultEnvironment,
             &Flags);
 
-        assert(hRes == 0);
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("GetDistributionConfiguration", hRes);
+        }
     }
 
     CoTaskMemFree(DistributionName);
@@ -245,6 +265,11 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL)
             &SockErr,
             &ServerSocket,
             &ExecutionContext);
+
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("CreateLxProcess", hRes);
+        }
     }
     else if (WindowsBuild < 20211) // Before Build 20211 Fe
     {
@@ -263,6 +288,11 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL)
             &SockOut,
             &SockErr,
             &ServerSocket);
+
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("CreateLxProcess", hRes);
+        }
     }
     else // After Build 20211 Fe
     {
@@ -282,9 +312,12 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL)
             &SockOut,
             &SockErr,
             &ServerSocket);
-    }
 
-    assert(hRes == 0);
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("CreateLxProcess", hRes);
+        }
+    }
 
     /* wsltty#254: Closes extra shell process. */
     if (SockIn) closesocket(SockIn);
