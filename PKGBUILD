@@ -1,5 +1,5 @@
 pkgname=wslbridge2
-pkgver=0.9
+pkgver=0.10
 pkgrel=1
 pkgdesc="Bridge WSL with Windows terminal emulators"
 arch=('i686' 'x86_64')
@@ -8,7 +8,7 @@ makedepends=('gcc' 'make')
 url='https://github.com/Biswa96/wslbridge2'
 source=(https://github.com/Biswa96/wslbridge2/archive/refs/tags/v${pkgver}.tar.gz
         wslbridge2-backend)
-sha256sums=('3614de12350bc9c6c4f3bcceb0d676d5d993c646a924070514224e8f8b39fe67'
+sha256sums=('SKIP'
             'SKIP')
 
 build() {
