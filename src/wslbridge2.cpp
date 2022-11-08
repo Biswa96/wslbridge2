@@ -159,7 +159,7 @@ static void usage(const char *prog)
 {
     printf("\nwslbridge2 %s : Runs a program within a Windows Subsystem for Linux (WSL) pty.\n",
         STRINGIFY(WSLBRIDGE2_VERSION));
-    printf("Copyright (C) 2019-2021 Biswapriyo Nath.\n");
+    printf("Copyright (C) 2019-2022 Biswapriyo Nath.\n");
     printf("Licensed under GNU General Public License version 3 or later.\n");
     printf("\n");
     printf("Usage: %s [options] [--] [command]...\n", prog);
@@ -179,7 +179,6 @@ static void usage(const char *prog)
     printf("                Changes the working directory to Windows style path.\n");
     printf("  -W, --wsldir  Folder\n");
     printf("                Changes the working directory to Unix style path.\n");
-    printf("  -x, --xmod    Enables X11 forwarding (unimplemented).\n");
 
     exit(0);
 }
@@ -244,7 +243,7 @@ int main(int argc, char *argv[])
     }
 
     int ret;
-    const char shortopts[] = "+b:d:e:hlsu:V:w:W:x";
+    const char shortopts[] = "+b:d:e:hlsu:V:w:W:";
     const struct option longopts[] = {
         { "backend",       required_argument, 0, 'b' },
         { "distribution",  required_argument, 0, 'd' },
@@ -256,7 +255,6 @@ int main(int argc, char *argv[])
         { "wslver",        required_argument, 0, 'V' },
         { "windir",        required_argument, 0, 'w' },
         { "wsldir",        required_argument, 0, 'W' },
-        { "xmod",          no_argument,       0, 'x' },
         { 0,               no_argument,       0,  0  },
     };
 
@@ -264,7 +262,7 @@ int main(int argc, char *argv[])
     class TerminalState termState;
     std::string distroName, customBackendPath;
     std::string winDir, wslDir, userName;
-    volatile bool debugMode = false, loginMode = false, xservMode = false;
+    volatile bool debugMode = false, loginMode = false;
 
     if (argv[0][0] == '-')
         loginMode = true;
@@ -329,8 +327,6 @@ int main(int argc, char *argv[])
                 if (wslDir.empty())
                     invalid_arg("wsldir");
                 break;
-
-            case 'x': xservMode = true; break;
 
             default:
                 fatal("Try '%s --help' for more information.\n", argv[0]);
@@ -397,9 +393,8 @@ int main(int argc, char *argv[])
         ret = swprintf(
                 buffer.data(),
                 buffer.size(),
-                L" %ls%ls--cols %d --rows %d -0%d -1%d -3%d",
+                L" %ls--cols %d --rows %d -0%d -1%d -3%d",
                 debugMode ? L"--show " : L"",
-                xservMode ? L"--xmod " : L"",
                 winp.ws_col,
                 winp.ws_row,
                 win_vsock_listen(inputSock, &VmId),
