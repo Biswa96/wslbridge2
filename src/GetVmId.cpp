@@ -8,6 +8,8 @@
  * GetVmId.cpp: Get GUID of WSL2 Utility VM with LxssUserSession COM interface.
  */
 
+#include <windows.h>
+#include <versionhelpers.h>
 #include <winsock.h>
 #include <winternl.h> /* TEB, PEB, ConsoleHandle */
 #include <string>
@@ -158,7 +160,7 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
         CoTaskMemFree(BasePath);
         CoTaskMemFree(KernelCommandLine);
     }
-    else if (WindowsBuild < 21313) // Before Build 21313 Cobalt
+    else if ((WindowsBuild < 21313) && !IsWindowsServer()) // Before Build 21313 Cobalt
     {
         if (DistroName.empty())
             hRes = ComObj.wslSessionTwo->lpVtbl->GetDefaultDistribution(
