@@ -188,12 +188,20 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
-static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine, const bool debugMode)
+static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine,
+    std::string distroName, const bool debugMode)
 {
     std::wstring cmdLine;
     cmdLine.append(L"\"");
     cmdLine.append(wslPath);
     cmdLine.append(L"\"");
+
+    if (!distroName.empty())
+    {
+        cmdLine.append(L" -d ");
+        cmdLine.append(mbsToWcs(distroName));
+    }
+
     cmdLine.append(L" /bin/sh -c");
     appendWslArg(wslCmdLine, L"-x");
     appendWslArg(cmdLine, wslCmdLine);
@@ -366,10 +374,6 @@ int main(int argc, char *argv[])
     bool IsLiftedWSL;
     ComInit(&IsLiftedWSL);
 
-    /* Start dummy process after ComInit, otherwise RPC_E_TOO_LATE */
-    if (IsLiftedWSL)
-        start_dummy(wslPath, wslCmdLine, debugMode);
-
     GUID DistroId, VmId;
     SOCKET inputSock = 0, outputSock = 0, controlSock = 0;
 
@@ -378,6 +382,11 @@ int main(int argc, char *argv[])
 
     if (wslTwo) /* WSL2: Use Hyper-V sockets. */
     {
+        // wsltty#302: Start dummy process after ComInit, otherwise RPC_E_TOO_LATE.
+        // wslbridge2#38: Do this only for WSL2 as WSL1 does not need the VM context.
+        if (IsLiftedWSL)
+            start_dummy(wslPath, wslCmdLine, distroName, debugMode);
+
         const HRESULT hRes = GetVmId(&DistroId, &VmId, IsLiftedWSL);
         if (hRes != 0)
             fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
