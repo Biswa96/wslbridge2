@@ -11,8 +11,8 @@
 #ifndef GETVMID_HPP
 #define GETVMID_HPP
 
-void ComInit(bool *IsLiftedWSL);
-bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLiftedWSL);
-HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL);
+void ComInit(int *LiftedWSLVersion);
+bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const int LiftedWSLVersion);
+HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const int LiftedWSLVersion);
 
 #endif /* GETVMID_HPP */

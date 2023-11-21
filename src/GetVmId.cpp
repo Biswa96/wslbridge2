@@ -34,7 +34,8 @@ static volatile union {
     ILxssUserSessionOne *wslSessionOne;
     ILxssUserSessionTwo *wslSessionTwo;
     ILxssUserSessionThree *wslSessionThree;
-    IWSLService *wslService;
+    IWSLServiceOne *wslServiceOne;
+    IWSLServiceTwo *wslServiceTwo;
 } ComObj = { NULL };
 
 static void LxssErrCode(HRESULT hRes)
@@ -44,7 +45,7 @@ static void LxssErrCode(HRESULT hRes)
         fatal("There is no distribution with the supplied name.\n");
 }
 
-void ComInit(bool *IsLiftedWSL)
+void ComInit(int *LiftedWSLVersion)
 {
     HRESULT hRes;
 
@@ -64,32 +65,47 @@ void ComInit(bool *IsLiftedWSL)
     }
 
     // wsltty#302: First try with COM server in lifted WSL service
-    hRes = CoCreateInstance(CLSID_WslService,
+    hRes = CoCreateInstance(CLSID_LxssUserSession2,
                             NULL,
                             CLSCTX_LOCAL_SERVER,
-                            IID_IWSLService,
+                            IID_ILxssUserSession2,
                             (PVOID *)&ComObj);
 
-    // Now try with COM server in system WSL service
     if (FAILED(hRes))
     {
-        hRes = CoCreateInstance(CLSID_LxssUserSession,
+        hRes = CoCreateInstance(CLSID_WslService,
                                 NULL,
                                 CLSCTX_LOCAL_SERVER,
-                                IID_ILxssUserSession,
+                                IID_IWSLService,
                                 (PVOID *)&ComObj);
-        if (hRes)
-        {
-            LOG_HRESULT_ERROR("CoCreateInstance", hRes);
-        }
 
-        *IsLiftedWSL = false;
+        // Now try with COM server in system WSL service
+        if (FAILED(hRes))
+        {
+            hRes = CoCreateInstance(CLSID_LxssUserSession,
+                                    NULL,
+                                    CLSCTX_LOCAL_SERVER,
+                                    IID_ILxssUserSession,
+                                    (PVOID *)&ComObj);
+            if (hRes)
+            {
+                LOG_HRESULT_ERROR("CoCreateInstance", hRes);
+            }
+
+            *LiftedWSLVersion = 0;
+        }
+        else
+        {
+            *LiftedWSLVersion = 1;
+        }
     }
     else
-        *IsLiftedWSL = true;
+    {
+        *LiftedWSLVersion = 2;
+    }
 }
 
-bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLiftedWSL)
+bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const int LiftedWSLVersion)
 {
     HRESULT hRes;
     PWSTR DistributionName, BasePath;
@@ -100,19 +116,19 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
 
     const int WindowsBuild = GetWindowsBuild();
 
-    if (IsLiftedWSL)
+    if (LiftedWSLVersion != 0)
     {
         if (DistroName.empty())
-            hRes = ComObj.wslService->lpVtbl->GetDefaultDistribution(
-                ComObj.wslService, &ExecutionContext, DistroId);
+            hRes = ComObj.wslServiceOne->lpVtbl->GetDefaultDistribution(
+                ComObj.wslServiceOne, &ExecutionContext, DistroId);
         else
-            hRes = ComObj.wslService->lpVtbl->GetDistributionId(
-                ComObj.wslService, DistroName.c_str(), 0, &ExecutionContext, DistroId);
+            hRes = ComObj.wslServiceOne->lpVtbl->GetDistributionId(
+                ComObj.wslServiceOne, DistroName.c_str(), 0, &ExecutionContext, DistroId);
 
         LxssErrCode(hRes);
 
-        hRes = ComObj.wslService->lpVtbl->GetDistributionConfiguration(
-            ComObj.wslService,
+        hRes = ComObj.wslServiceOne->lpVtbl->GetDistributionConfiguration(
+            ComObj.wslServiceOne,
             DistroId,
             &DistributionName,
             &Version,
@@ -224,7 +240,7 @@ bool IsWslTwo(GUID *DistroId, const std::wstring DistroName, const bool IsLifted
         return false;
 }
 
-HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL)
+HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const int LiftedWSLVersion)
 {
     HRESULT hRes;
     GUID InitiatedDistroID;
@@ -246,10 +262,35 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const bool IsLiftedWSL)
 
     const int WindowsBuild = GetWindowsBuild();
 
-    if (IsLiftedWSL)
+    if (LiftedWSLVersion == 1)
     {
-        hRes = ComObj.wslService->lpVtbl->CreateLxProcess(
-            ComObj.wslService,
+        hRes = ComObj.wslServiceOne->lpVtbl->CreateLxProcess(
+            ComObj.wslServiceOne,
+            DistroId,
+            nullptr, 0, nullptr, nullptr, nullptr,
+            nullptr, 0, nullptr, 0, 0,
+            HandleToULong(ConsoleHandle),
+            &StdHandles,
+            0,
+            &InitiatedDistroID,
+            LxInstanceID,
+            &LxProcessHandle,
+            &ServerHandle,
+            &SockIn,
+            &SockOut,
+            &SockErr,
+            &ServerSocket,
+            &ExecutionContext);
+
+        if (hRes)
+        {
+            LOG_HRESULT_ERROR("CreateLxProcess", hRes);
+        }
+    }
+    else if (LiftedWSLVersion == 2)
+    {
+        hRes = ComObj.wslServiceTwo->lpVtbl->CreateLxProcess(
+            ComObj.wslServiceTwo,
             DistroId,
             nullptr, 0, nullptr, nullptr, nullptr,
             nullptr, 0, nullptr, 0, 0,

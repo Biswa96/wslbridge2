@@ -371,23 +371,23 @@ int main(int argc, char *argv[])
     win_sock_init();
 
     /* Initialize COM. */
-    bool IsLiftedWSL;
-    ComInit(&IsLiftedWSL);
+    int LiftedWSLVersion = 0;
+    ComInit(&LiftedWSLVersion);
 
     GUID DistroId, VmId;
     SOCKET inputSock = 0, outputSock = 0, controlSock = 0;
 
     /* Detect WSL version. Assume distroName is initialized empty. */
-    const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName), IsLiftedWSL);
+    const bool wslTwo = IsWslTwo(&DistroId, mbsToWcs(distroName), LiftedWSLVersion);
 
     if (wslTwo) /* WSL2: Use Hyper-V sockets. */
     {
         // wsltty#302: Start dummy process after ComInit, otherwise RPC_E_TOO_LATE.
         // wslbridge2#38: Do this only for WSL2 as WSL1 does not need the VM context.
-        if (IsLiftedWSL)
+        if (LiftedWSLVersion)
             start_dummy(wslPath, wslCmdLine, distroName, debugMode);
 
-        const HRESULT hRes = GetVmId(&DistroId, &VmId, IsLiftedWSL);
+        const HRESULT hRes = GetVmId(&DistroId, &VmId, LiftedWSLVersion);
         if (hRes != 0)
             fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
 
