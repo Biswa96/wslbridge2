@@ -23,7 +23,7 @@ jobs:
           name: wslbridge2-backend
           path: wslbridge2-backend
 
-  frontend:
+  frontend-msys2:
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -31,7 +31,7 @@ jobs:
         with:
           fetch-depth: 1
           show-progress: false
-      - name: Update
+      - name: Install msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: MSYS
@@ -44,5 +44,28 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
-          name: wslbridge2.exe
+          name: wslbridge2-msys2
+          path: bin/wslbridge2.exe
+
+  frontend-cygwin:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          show-progress: false
+      - name: Install cygwin
+        uses: cygwin/cygwin-install-action@master
+        with:
+          platform: x86_64
+          packages: gcc-g++ make
+      - name: Build
+        shell: C:\cygwin\bin\bash.exe --noprofile --norc -eo pipefail '{0}'
+        run: |
+          make RELEASE=1
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: wslbridge2-cygwin
           path: bin/wslbridge2.exe
