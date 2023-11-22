@@ -9,9 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
       - name: Build
         run: |
           docker build . -t wslbridge2
@@ -26,9 +27,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
       - name: Update
         uses: msys2/setup-msys2@v2
         with:
