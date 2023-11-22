@@ -12,7 +12,7 @@
 [![Top Language](https://img.shields.io/github/languages/top/Biswa96/wslbridge2.svg?style=flat-square)][2]&nbsp;&nbsp;&nbsp;
 [![Code size](https://img.shields.io/github/languages/code-size/Biswa96/wslbridge2.svg?style=flat-square)]()&nbsp;&nbsp;&nbsp;
 [![GitHub release](https://img.shields.io/github/release/Biswa96/wslbridge2.svg?style=flat-square)][3]&nbsp;&nbsp;&nbsp;
-[![Appveyor Build](https://img.shields.io/appveyor/ci/Biswa96/wslbridge2.svg?style=flat-square)][4]&nbsp;&nbsp;&nbsp;
+[![GitHub Actions](https://github.com/Biswa96/wslbridge2/actions/workflows/main.yml/badge.svg)][4]&nbsp;&nbsp;&nbsp;
 
 Explore various ways to connect Windows Subsystem for Linux (WSL) with
 Windows terminal emulators and command line programs.
@@ -38,7 +38,7 @@ All binaries will be placed in `bin` folder.
 ## How to use
 
 Download the released stable binaries from [Release page][3]. Or to test
-nightly builds, download the wslbridge2.zip from this [Appveyor project link][5].
+nightly builds, download the build artifacts from [GitHub Actions](https://github.com/Biswa96/wslbridge2/actions).
 Here are some info about the directories of this project.
 
 ### samples: sample C code using Hyper-V sockets
@@ -148,8 +148,7 @@ A full copy of the license is provided in [LICENSE](LICENSE).
 [1]: LICENSE
 [2]: https://github.com/Biswa96/wslbridge2.git
 [3]: https://github.com/Biswa96/wslbridge2/releases
-[4]: https://ci.appveyor.com/project/Biswa96/wslbridge2
-[5]: https://ci.appveyor.com/api/projects/Biswa96/wslbridge2/artifacts/wslbridge2.zip?branch=master&job=Image%3A%20Visual%20Studio%202019
+[4]: https://github.com/Biswa96/wslbridge2/actions/workflows/main.yml
 [6]: https://docs.microsoft.com/en-us/virtualization/hyper-v-on-windows/user-guide/make-integration-service
 [7]: https://github.com/torvalds/linux/blob/master/net/vmw_vsock/af_vsock.c
 [8]: https://github.com/torvalds/linux/blob/master/include/uapi/linux/vm_sockets.h
