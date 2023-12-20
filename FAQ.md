@@ -69,14 +69,6 @@ and buffer handling are different.
 
 ------
 
-**Q4: How to get Windows IP address in WSL2 quickly?**
-
-**A4:** Run `wslbridge2.exe` command as usual. IPv4 address of Windows 10 side
-is set to `WSL_HOST_IP` and of WSL2 side is set to `WSL_GUEST_IP` environment
-variable. e.g. for GUI programs, use `export DISPLAY=$WSL_HOST_IP:0`.
-
-------
-
 **Q5: What are the error code starting with 0x8?**
 
 **A5:** Generally the [system error codes][3] are translated into error

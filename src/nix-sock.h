@@ -35,9 +35,6 @@ int nix_vsock_connect(const unsigned int port);
 // Create and listen to a vsocket and return it.
 int nix_vsock_listen(unsigned int *port);
 
-// Set custom environment variables with IP values for WSL2.
-void nix_set_env(void);
-
 #ifdef __cplusplus
 }
 #endif

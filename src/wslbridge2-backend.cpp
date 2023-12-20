@@ -337,13 +337,6 @@ int main(int argc, char *argv[])
         for (char *const &setting : childParams.env)
             putenv(setting);
 
-        /*
-         * wsltty#225: Set WSL_GUEST_IP environment variable in WSL2 only.
-         * As WSL1 gets same IP address as Windows and NIC may not be eth0.
-         */
-        if (vmMode)
-            nix_set_env();
-
         /* Changed directory should affect in child process */
         if (!childParams.cwd.empty())
         {
