@@ -22,6 +22,7 @@ LIBS = -lole32 -lws2_32
 OBJS = \
 $(BINDIR)/common.obj \
 $(BINDIR)/GetVmId.obj \
+$(BINDIR)/GetVmIdWsl2.obj \
 $(BINDIR)/Helpers.obj \
 $(BINDIR)/TerminalState.obj \
 $(BINDIR)/windows-sock.obj \
@@ -51,6 +52,9 @@ $(BINDIR)/windows-sock.obj : windows-sock.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BINDIR)/wslbridge2.obj : wslbridge2.cpp
+	$(CXX) -c $(CXXFLAGS) $(CCOPT) $< -o $@
+
+$(BINDIR)/GetVmIdWsl2.obj : GetVmIdWsl2.cpp
 	$(CXX) -c $(CXXFLAGS) $(CCOPT) $< -o $@
 
 $(BINDIR) :
