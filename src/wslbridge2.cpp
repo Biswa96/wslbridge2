@@ -27,6 +27,7 @@
 #include "Environment.hpp"
 #include "TerminalState.hpp"
 #include "windows-sock.h"
+#include "GetVmIdWsl2.hpp"
 
 union IoSockets
 {
@@ -384,12 +385,12 @@ int main(int argc, char *argv[])
     {
         // wsltty#302: Start dummy process after ComInit, otherwise RPC_E_TOO_LATE.
         // wslbridge2#38: Do this only for WSL2 as WSL1 does not need the VM context.
+        // wslbridge2#42: Required for WSL2 to get the VM ID.
         if (LiftedWSLVersion)
             start_dummy(wslPath, wslCmdLine, distroName, debugMode);
 
-        const HRESULT hRes = GetVmId(&DistroId, &VmId, LiftedWSLVersion);
-        if (hRes != 0)
-            fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
+        if (!GetVmIdWsl2(VmId))
+            fatal("Failed to get VM ID");
 
         inputSock = win_vsock_create();
         outputSock = win_vsock_create();
