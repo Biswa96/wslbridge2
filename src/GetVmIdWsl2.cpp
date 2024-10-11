@@ -107,7 +107,7 @@ std::vector<DWORD> GetProcessIDsByName(const std::wstring& processName) {
 // Extract GUID from wslHost.exe command line
 // Example commandline:
 // wslhost.exe --vm-id {f6446e02-236e-4b24-9916-2d4ad9a1096f} --handle 1664
-bool GetVmIdWsl2(GUID& vmId) {
+bool GetVmIdWsl2(GUID* vmId) {
     std::vector<DWORD>  pids = GetProcessIDsByName(L"wslhost.exe");
     for (DWORD pid : pids) {
         std::wstring cmdLine;
@@ -115,10 +115,10 @@ bool GetVmIdWsl2(GUID& vmId) {
             continue;
 
         std::wstring cmdVmId;
-        if(!ExtractGUID(L"--vm-id", cmdLine, cmdVmId)) 
+        if(!ExtractGUID(L"--vm-id", cmdLine, cmdVmId))
             continue;
         
-        if (IIDFromString(cmdVmId.c_str(), &vmId) == S_OK) 
+        if (IIDFromString(cmdVmId.c_str(), vmId) == S_OK) 
             return true;
     }
     return false;

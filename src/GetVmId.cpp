@@ -16,6 +16,7 @@
 #include "GetVmId.hpp"
 #include "LxssUserSession.hpp"
 #include "Helpers.hpp"
+#include "GetVmIdWsl2.hpp"
 
 #ifndef WSL_DISTRIBUTION_FLAGS_VALID
 
@@ -309,7 +310,15 @@ HRESULT GetVmId(GUID *DistroId, GUID *LxInstanceID, const int LiftedWSLVersion)
 
         if (hRes)
         {
-            LOG_HRESULT_ERROR("CreateLxProcess", hRes);
+            // Try get VM ID from command line of wslHost.exe
+            if (GetVmIdWsl2(LxInstanceID))
+            {
+                hRes = 0;
+            }
+            else
+            {
+                LOG_HRESULT_ERROR("CreateLxProcess", hRes);
+            }
         }
     }
     else if (WindowsBuild < 20211) // Before Build 20211 Fe
