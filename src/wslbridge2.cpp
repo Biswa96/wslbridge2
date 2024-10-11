@@ -27,7 +27,6 @@
 #include "Environment.hpp"
 #include "TerminalState.hpp"
 #include "windows-sock.h"
-#include "GetVmIdWsl2.hpp"
 
 union IoSockets
 {
@@ -389,8 +388,9 @@ int main(int argc, char *argv[])
         if (LiftedWSLVersion)
             start_dummy(wslPath, wslCmdLine, distroName, debugMode);
 
-        if (!GetVmIdWsl2(VmId))
-            fatal("Failed to get VM ID");
+        const HRESULT hRes = GetVmId(&DistroId, &VmId, LiftedWSLVersion);
+        if (hRes != 0)
+            fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
 
         inputSock = win_vsock_create();
         outputSock = win_vsock_create();
