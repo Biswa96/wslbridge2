@@ -18,7 +18,7 @@ jobs:
           docker build . -t wslbridge2
           docker run --rm wslbridge2 tar -cf - -C /build/bin wslbridge2-backend | tar -xvf -
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wslbridge2-backend
           path: wslbridge2-backend
@@ -42,7 +42,7 @@ jobs:
         run: |
           make RELEASE=1
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wslbridge2-msys2
           path: bin/wslbridge2.exe
@@ -65,7 +65,7 @@ jobs:
         run: |
           make RELEASE=1
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wslbridge2-cygwin
           path: bin/wslbridge2.exe
