@@ -256,9 +256,9 @@ int main(int argc, char *argv[])
                             s++;
                             len--;
                             // ensure 8 more bytes are loaded for winsize
-                            while (readRet > 0 && len < 8)
+                            while (readRet > 0 && len < 16)
                             {
-                                readRet = recv(ioSockets.inputSock, s + len, 8 - len, 0);
+                                readRet = recv(ioSockets.inputSock, s + len, 16 - len, 0);
                                 if (readRet > 0)
                                 {
                                     len += readRet;
@@ -272,8 +272,6 @@ int main(int argc, char *argv[])
                             struct winsize * winsp = (struct winsize *)s;
                             s += 8;
                             len -= 8;
-                            winsp->ws_xpixel = 0;
-                            winsp->ws_ypixel = 0;
                             ret = ioctl(mfd, TIOCSWINSZ, winsp);
                             if (ret != 0)
                                 perror("ioctl(TIOCSWINSZ)");
@@ -299,8 +297,6 @@ int main(int argc, char *argv[])
                 assert(ret > 0);
 
                 /* Remove "unused" pixel values ioctl_tty(2) */
-                winp.ws_xpixel = 0;
-                winp.ws_ypixel = 0;
                 ret = ioctl(mfd, TIOCSWINSZ, &winp);
                 if (ret != 0)
                     perror("ioctl(TIOCSWINSZ)");
