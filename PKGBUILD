@@ -1,5 +1,5 @@
 pkgname=wslbridge2
-pkgver=0.12
+pkgver=0.13
 pkgrel=1
 pkgdesc="Bridge WSL with Windows terminal emulators"
 arch=('i686' 'x86_64')

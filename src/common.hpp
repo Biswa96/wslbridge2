@@ -1,13 +1,13 @@
 /*
  * This file is part of wslbridge2 project.
  * Licensed under the terms of the GNU General Public License v3 or later.
- * Copyright (C) 2019-2023 Biswapriyo Nath.
+ * Copyright (C) 2019-2024 Biswapriyo Nath.
  */
 
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
-#define WSLBRIDGE2_VERSION v0.12
+#define WSLBRIDGE2_VERSION v0.13
 
 #define XSTRINGIFY(x) #x
 #define STRINGIFY(x) XSTRINGIFY(x)
