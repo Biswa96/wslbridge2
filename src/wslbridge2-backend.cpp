@@ -256,9 +256,9 @@ int main(int argc, char *argv[])
                             s++;
                             len--;
                             // ensure 8 more bytes are loaded for winsize
-                            while (readRet > 0 && len < 16)
+                            while (readRet > 0 && len < 8)
                             {
-                                readRet = recv(ioSockets.inputSock, s + len, 16 - len, 0);
+                                readRet = recv(ioSockets.inputSock, s + len, 8 - len, 0);
                                 if (readRet > 0)
                                 {
                                     len += readRet;
