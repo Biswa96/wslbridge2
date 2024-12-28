@@ -132,7 +132,13 @@ int main(int argc, char *argv[])
     }
 
     if (xtraMode)
+    {
+        char buf[2];
+        printf("\n");
+        fflush(stdout);
+        fgets(buf, sizeof(buf), stdin);
         return 0;
+    }
 
     /* If size not provided use master window size */
     if (winp.ws_col == 0 || winp.ws_row == 0)
