@@ -39,7 +39,7 @@ bool GetCommandLineForPID(DWORD pid, std::wstring& commandLine)
     if (process == NULL)
     {
         DWORD err = GetLastError();
-        fatal("failed to open the process, error: %d", err);
+        //fatal("failed to open the process, error: %d", err);
         return false;
     }
     // Get the address of the PEB

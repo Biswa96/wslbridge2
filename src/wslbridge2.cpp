@@ -27,6 +27,7 @@
 #include "Environment.hpp"
 #include "TerminalState.hpp"
 #include "windows-sock.h"
+#include "GetVmIdWsl2.hpp"
 
 union IoSockets
 {
@@ -188,13 +189,14 @@ static void invalid_arg(const char *arg)
     fatal("error: the %s option requires a non-empty string argument\n", arg);
 }
 
-static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine,
-    std::string distroName, const bool debugMode)
+static bool start_dummy(std::wstring wslPath, std::wstring wslCmdLine,
+    std::string distroName, const bool debugMode, const int LiftedWSLVersion, GUID* vmId)
 {
     std::wstring cmdLine;
     cmdLine.append(L"\"");
     cmdLine.append(wslPath);
     cmdLine.append(L"\"");
+    bool ret = false;
 
     if (!distroName.empty())
     {
@@ -212,12 +214,29 @@ static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine,
     PROCESS_INFORMATION pi = {};
     STARTUPINFOW si = {};
     si.cb = sizeof si;
+    const struct PipeHandles inputPipe = createPipe();
+    const struct PipeHandles outputPipe = createPipe();
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    si.hStdInput = inputPipe.rh;
+    si.hStdOutput = outputPipe.wh;
 
     if (CreateProcessW(wslPath.c_str(), &cmdLine[0],
-        NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) == FALSE)
+        NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) == FALSE)
     {
         LOG_WIN32_ERROR("CreateProcessW");
     }
+    CloseHandle(inputPipe.rh);
+    CloseHandle(outputPipe.wh);
+
+    char buf[1];
+    DWORD actual {};
+    ReadFile(outputPipe.rh, buf, sizeof(buf), &actual, nullptr);
+
+    if (LiftedWSLVersion == 2)
+        // Try get VM ID from command line of wslHost.exe
+        ret = GetVmIdWsl2(vmId);
+
+    WriteFile(inputPipe.wh, buf, sizeof(buf), &actual, nullptr);
 
     if (WaitForSingleObject(pi.hProcess, INFINITE))
     {
@@ -226,6 +245,8 @@ static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine,
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+
+    return ret;
 }
 
 int main(int argc, char *argv[])
@@ -374,7 +395,8 @@ int main(int argc, char *argv[])
     int LiftedWSLVersion = 0;
     ComInit(&LiftedWSLVersion);
 
-    GUID DistroId, VmId;
+    GUID DistroId, VmId, VmId_from_Cmdline;
+    bool got_vm_id = false;
     SOCKET inputSock = 0, outputSock = 0, controlSock = 0;
 
     /* Detect WSL version. Assume distroName is initialized empty. */
@@ -386,11 +408,20 @@ int main(int argc, char *argv[])
         // wslbridge2#38: Do this only for WSL2 as WSL1 does not need the VM context.
         // wslbridge2#42: Required for WSL2 to get the VM ID.
         if (LiftedWSLVersion)
-            start_dummy(wslPath, wslCmdLine, distroName, debugMode);
+            got_vm_id = start_dummy(wslPath, wslCmdLine, distroName, debugMode, LiftedWSLVersion, &VmId_from_Cmdline);
 
         const HRESULT hRes = GetVmId(&DistroId, &VmId, LiftedWSLVersion);
         if (hRes != 0)
-            fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
+        {
+            if (got_vm_id)
+            {
+                VmId = VmId_from_Cmdline;
+            }
+            else
+            {
+                fatal("GetVmId: %s\n", GetErrorMessage(hRes).c_str());
+            }
+        }
 
         inputSock = win_vsock_create();
         outputSock = win_vsock_create();
